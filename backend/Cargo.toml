@@ -1,0 +1,19 @@
+[package]
+name = "backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+diesel = { version = "2.2", features = ["sqlite", "r2d2", "chrono"] }
+tokio = { version = "1.43", features = ["full"]}
+axum = { version = "0.8", features = ["json"] }
+dotenvy = "0.15"         # If you want to read .env for DB URL
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+
+[dev-dependencies]
+reqwest = { version = "0.12", features = ["json"] }
+diesel_migrations = "2.2"
+tempfile = "3.15"
