@@ -11,6 +11,9 @@ dotenvy = "0.15"         # If you want to read .env for DB URL
 chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+bcrypt = "0.16"
+jsonwebtoken = "9.3"
+tower-http = { version = "0.6.2", features = ["trace"] }
 
 
 [dev-dependencies]

@@ -1,8 +1,11 @@
 // src/main.rs
+mod auth;
 mod models;
 mod schema;
 
+use auth::{generate_jwt, require_auth};
 use axum::{extract::State, routing::post, Json, Router};
+use bcrypt::{hash, verify, DEFAULT_COST};
 use diesel::prelude::*;
 use diesel::result::{DatabaseErrorKind, Error as DieselError};
 use diesel::sqlite::SqliteConnection;
@@ -10,6 +13,7 @@ use dotenvy::dotenv;
 use std::env;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tower_http::trace::TraceLayer;
 
 use models::{
     Category, LoginRequest, NewCategory, NewProduct, NewProductPrice, NewTransaction, NewUser,
@@ -62,10 +66,15 @@ fn handle_unique_violation(
 // POST /users -> sign up a new user
 async fn sign_up(
     State(state): State<Arc<AppState>>,
-    Json(new_user): Json<NewUser>,
+    Json(mut new_user): Json<NewUser>,
 ) -> &'static str {
     let mut conn = get_connection(&state.db_url);
 
+    // 1) Hash the raw password
+    let hashed = hash(&new_user.password_hash, DEFAULT_COST).expect("Failed to hash password");
+    new_user.password_hash = hashed;
+
+    // 2) Insert into DB
     let insert_result = diesel::insert_into(schema::users::table)
         .values(&new_user)
         .execute(&mut conn);
@@ -77,18 +86,29 @@ async fn sign_up(
 async fn login(State(state): State<Arc<AppState>>, Json(payload): Json<LoginRequest>) -> String {
     let mut conn = get_connection(&state.db_url);
 
-    // Check if user with this email + password exists
     use schema::users::dsl::*;
     let maybe_user = users
         .filter(email.eq(&payload.email))
-        .filter(password_hash.eq(&payload.password_hash))
         .select(User::as_select())
-        .first(&mut conn)
+        .first::<User>(&mut conn)
         .optional()
         .expect("Error querying user");
 
     match maybe_user {
-        Some(u) => format!("Login successful for user_id={:?}", u.id),
+        Some(u) => {
+            // Compare plaintext from login request to stored hash
+            let password_matches =
+                verify(&payload.password_hash, &u.password_hash).unwrap_or(false);
+
+            if password_matches {
+                // If correct, generate a token
+                let token = generate_jwt(u.id.expect("User ID should exist"));
+                // Return the token (in production, you might set an HTTP-only cookie or Bearer token)
+                format!("{{\"token\": \"{}\"}}", token)
+            } else {
+                "Invalid email or password".to_string()
+            }
+        }
         None => "Invalid email or password".to_string(),
     }
 }
@@ -218,25 +238,28 @@ async fn list_transactions(State(state): State<Arc<AppState>>) -> Json<Vec<Trans
 }
 
 pub fn main_router(shared_state: Arc<AppState>) -> Router {
-    Router::new()
-        // User endpoints
-        .route("/users", post(sign_up))
-        .route("/login", post(login))
-        // Category endpoints
+    let protected_routes = Router::new()
+        // Protected endpoints go here
         .route("/categories", post(create_category).get(list_categories))
-        // Product endpoints
         .route("/products", post(create_product).get(list_products))
-        // ProductPrice endpoints
-        .route(
-            "/product_prices",
-            post(create_product_price).get(list_product_prices),
-        )
-        // Transaction endpoints
         .route(
             "/transactions",
             post(create_transaction).get(list_transactions),
         )
+        .route(
+            "/product_prices",
+            post(create_product_price).get(list_product_prices),
+        )
+        .layer(axum::middleware::from_fn(require_auth)); // <--- apply JWT check
+
+    Router::new()
+        // Public endpoints (no auth required)
+        .route("/users", post(sign_up))
+        .route("/login", post(login))
+        // All protected endpoints are nested here
+        .merge(protected_routes)
         .with_state(shared_state)
+        .layer(TraceLayer::new_for_http())
 }
 
 //

@@ -89,7 +89,7 @@ async fn test_full_workflow() {
     let text = resp.text().await.unwrap();
     assert_eq!(text, "A user with that email already exists");
 
-    // 3. Login
+    // 3. Login -> now we expect a JSON string like: `{"token":"<JWT>"}`
     let resp = client
         .post(format!("{}/login", base_url))
         .json(&serde_json::json!({
@@ -100,12 +100,19 @@ async fn test_full_workflow() {
         .await
         .expect("Failed to login");
     assert!(resp.status().is_success());
-    let text = resp.text().await.unwrap();
-    assert_eq!(text, "Login successful for user_id=Some(1)");
 
-    // 4. Create "Groceries"
+    // Parse the JSON body to get the token
+    #[derive(serde::Deserialize)]
+    struct TokenResponse {
+        token: String,
+    }
+    let token_body: TokenResponse = resp.json().await.unwrap();
+    let token = token_body.token;
+
+    // 4. Create "Groceries" -> must include bearer auth header
     let resp = client
         .post(format!("{}/categories", base_url))
+        .bearer_auth(&token) // <--- set the token
         .json(&serde_json::json!({
             "user_id": 1,
             "parent_category_id": null,
@@ -118,9 +125,10 @@ async fn test_full_workflow() {
     let text = resp.text().await.unwrap();
     assert_eq!(text, "Category created");
 
-    // 5. Create "Dairy" under Groceries
+    // 5. Create "Dairy" under Groceries -> again, set bearer auth
     let resp = client
         .post(format!("{}/categories", base_url))
+        .bearer_auth(&token)
         .json(&serde_json::json!({
             "user_id": 1,
             "parent_category_id": 1,
@@ -136,6 +144,7 @@ async fn test_full_workflow() {
     // 6. Create product "Milk"
     let resp = client
         .post(format!("{}/products", base_url))
+        .bearer_auth(&token)
         .json(&serde_json::json!({
             "user_id": 1,
             "name": "Milk"
@@ -150,6 +159,7 @@ async fn test_full_workflow() {
     // 7. Insert price
     let resp = client
         .post(format!("{}/product_prices", base_url))
+        .bearer_auth(&token)
         .json(&serde_json::json!({
             "product_id": 1,
             "price": 299,
@@ -165,6 +175,7 @@ async fn test_full_workflow() {
     // 8. Create transaction
     let resp = client
         .post(format!("{}/transactions", base_url))
+        .bearer_auth(&token)
         .json(&serde_json::json!({
             "user_id": 1,
             "product_id": 1,
@@ -184,6 +195,7 @@ async fn test_full_workflow() {
     // 9. Fetch transactions
     let resp = client
         .get(format!("{}/transactions", base_url))
+        .bearer_auth(&token)
         .send()
         .await
         .expect("Failed to get transactions");
