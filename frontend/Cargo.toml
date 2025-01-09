@@ -4,3 +4,19 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# Yew for the UI
+yew = { version = "0.21", features = ["csr"] }
+# If you prefer the latest possible:
+# yew = "0.21"
+
+# We'll use gloo-net for HTTP requests in Yew (wasm-friendly)
+gloo-net = "0.6"
+
+# Serde and Serde JSON for (de)serializing data
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Some basic macros for console logging (optional)
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4.49"
+web-sys = "0.3"

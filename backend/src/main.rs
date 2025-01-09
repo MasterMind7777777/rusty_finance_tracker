@@ -13,6 +13,7 @@ use dotenvy::dotenv;
 use std::env;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 use models::{
@@ -252,6 +253,12 @@ pub fn main_router(shared_state: Arc<AppState>) -> Router {
         )
         .layer(axum::middleware::from_fn(require_auth)); // <--- apply JWT check
 
+    // Create the CORS layer: allow any origin for dev
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     Router::new()
         // Public endpoints (no auth required)
         .route("/users", post(sign_up))
@@ -259,6 +266,7 @@ pub fn main_router(shared_state: Arc<AppState>) -> Router {
         // All protected endpoints are nested here
         .merge(protected_routes)
         .with_state(shared_state)
+        .layer(cors)
         .layer(TraceLayer::new_for_http())
 }
 
