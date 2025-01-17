@@ -30,6 +30,7 @@ diesel::table! {
     tags (id) {
         id -> Nullable<Integer>,
         name -> Text,
+        user_id -> Integer,
     }
 }
 
@@ -64,6 +65,7 @@ diesel::table! {
 diesel::joinable!(categories -> users (user_id));
 diesel::joinable!(product_prices -> products (product_id));
 diesel::joinable!(products -> users (user_id));
+diesel::joinable!(tags -> users (user_id));
 diesel::joinable!(transaction_tags -> tags (tag_id));
 diesel::joinable!(transaction_tags -> transactions (transaction_id));
 diesel::joinable!(transactions -> categories (category_id));

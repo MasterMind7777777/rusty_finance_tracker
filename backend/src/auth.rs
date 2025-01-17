@@ -36,7 +36,7 @@ pub fn generate_jwt(user_id: i32) -> String {
     .expect("JWT encode should not fail")
 }
 
-pub async fn require_auth(req: Request, next: Next) -> Result<Response, StatusCode> {
+pub async fn require_auth(mut req: Request, next: Next) -> Result<Response, StatusCode> {
     let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "CHANGE_ME".to_string());
 
     // Extract Authorization header
@@ -63,9 +63,9 @@ pub async fn require_auth(req: Request, next: Next) -> Result<Response, StatusCo
 
     // Optionally, store `token_data.claims.sub` (user_id) in request extensions
     // so future handlers can figure out who is calling
-    let user_id = token_data.claims.sub;
-    print!("user id: {}", user_id);
-    // e.g., req.extensions_mut().insert(user_id);
+    let logged_in_user_id = token_data.claims.sub;
+    print!("user id: {}", logged_in_user_id);
+    req.extensions_mut().insert(logged_in_user_id);
 
     Ok(next.run(req).await)
 }

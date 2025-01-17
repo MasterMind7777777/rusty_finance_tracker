@@ -1,4 +1,3 @@
-// src/models.rs
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +25,7 @@ pub struct NewUser {
     pub password_hash: String,
 }
 
+// For login requests
 #[derive(Deserialize)]
 pub struct LoginRequest {
     pub email: String,
@@ -35,6 +35,23 @@ pub struct LoginRequest {
 // =====================
 //     CATEGORY
 // =====================
+
+// What gets stored in DB (needs user_id)
+#[derive(Insertable)]
+#[diesel(table_name = categories)]
+pub struct NewCategory {
+    pub user_id: i32,
+    pub parent_category_id: Option<i32>,
+    pub name: String,
+}
+
+// What the client sends (no user_id)
+#[derive(Deserialize)]
+pub struct CategoryPayload {
+    pub parent_category_id: Option<i32>,
+    pub name: String,
+}
+
 #[derive(Selectable, Queryable, Serialize, Deserialize, Debug)]
 #[diesel(table_name = categories)]
 pub struct Category {
@@ -44,27 +61,27 @@ pub struct Category {
     pub name: String,
 }
 
-#[derive(Insertable, Deserialize)]
-#[diesel(table_name = categories)]
-pub struct NewCategory {
+// =====================
+//     PRODUCT
+// =====================
+
+// DB struct
+#[derive(Insertable)]
+#[diesel(table_name = products)]
+pub struct NewProduct {
     pub user_id: i32,
-    pub parent_category_id: Option<i32>,
     pub name: String,
 }
 
-// =====================
-//     PRODUCT
-// =================
+// Client-sent payload
+#[derive(Deserialize)]
+pub struct ProductPayload {
+    pub name: String,
+}
+
 #[derive(Selectable, Queryable, Serialize, Deserialize, Debug)]
 pub struct Product {
     pub id: Option<i32>,
-    pub user_id: i32,
-    pub name: String,
-}
-
-#[derive(Insertable, Deserialize)]
-#[diesel(table_name = products)]
-pub struct NewProduct {
     pub user_id: i32,
     pub name: String,
 }
@@ -130,28 +147,38 @@ impl diesel::deserialize::FromSql<Text, Sqlite> for TransactionType {
 // =====================
 //     TRANSACTION
 // =====================
+
+// DB struct
+#[derive(Insertable)]
+#[diesel(table_name = transactions)]
+pub struct NewTransaction {
+    pub user_id: i32,
+    pub product_id: Option<i32>,
+    pub category_id: Option<i32>,
+    pub transaction_type: String, // e.g. "in" or "out"
+    pub amount: i32,
+    pub description: Option<String>,
+    pub date: String,
+}
+
+// Client-sent payload
+#[derive(Deserialize)]
+pub struct TransactionPayload {
+    pub product_id: Option<i32>,
+    pub category_id: Option<i32>,
+    pub transaction_type: String, // e.g. "in" or "out"
+    pub amount: i32,
+    pub description: Option<String>,
+    pub date: String,
+}
+
 #[derive(Selectable, Queryable, Serialize, Deserialize, Debug)]
 pub struct Transaction {
     pub id: Option<i32>,
     pub user_id: i32,
     pub product_id: Option<i32>,
     pub category_id: Option<i32>,
-    pub transaction_type: String, // or TransactionType if you want
-    pub amount: i32,
-    pub description: Option<String>,
-    pub date: String,
-}
-
-#[derive(Insertable, Deserialize)]
-#[diesel(table_name = transactions)]
-pub struct NewTransaction {
-    pub user_id: i32,
-    pub product_id: Option<i32>,
-    pub category_id: Option<i32>,
-    // Diesel’s default approach might require us to store as a String.
-    // If you want the custom enum approach, do `#[diesel(sql_type = Text)]`
-    // and store a TransactionType above.
-    pub transaction_type: String,
+    pub transaction_type: String, // or TransactionType
     pub amount: i32,
     pub description: Option<String>,
     pub date: String,

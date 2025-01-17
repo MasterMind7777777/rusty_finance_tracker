@@ -6,8 +6,7 @@ edition = "2021"
 [dependencies]
 # Yew for the UI
 yew = { version = "0.21", features = ["csr"] }
-# If you prefer the latest possible:
-# yew = "0.21"
+yew-hooks = "0.3.3"
 
 # We'll use gloo-net for HTTP requests in Yew (wasm-friendly)
 gloo-net = "0.6"

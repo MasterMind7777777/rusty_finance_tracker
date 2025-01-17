@@ -7,6 +7,7 @@ CREATE TABLE products (
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users (id)
+    UNIQUE (user_id, name)
 );
 
 CREATE TABLE product_prices (
