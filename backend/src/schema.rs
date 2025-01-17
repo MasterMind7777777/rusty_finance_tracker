@@ -45,10 +45,9 @@ diesel::table! {
     transactions (id) {
         id -> Nullable<Integer>,
         user_id -> Integer,
-        product_id -> Nullable<Integer>,
+        product_id -> Integer,
         category_id -> Nullable<Integer>,
         transaction_type -> Text,
-        amount -> Integer,
         description -> Nullable<Text>,
         date -> Text,
     }

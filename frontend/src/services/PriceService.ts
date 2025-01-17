@@ -12,13 +12,20 @@ export async function fetchProductPrices(
     console.error("Error fetching product prices:", await res.text());
     return [];
   }
-  return (await res.json()) as ProductPrice[];
+  // convert cents to dollars
+  const prices = await res.json();
+  prices.forEach((price: ProductPrice) => {
+    price.price /= 100;
+  });
+  return prices as ProductPrice[];
 }
 
 export async function createProductPrice(
   token: string,
   payload: NewProductPrice,
 ): Promise<boolean> {
+  // get cents from price
+  payload.price = Math.round(payload.price * 100);
   const res = await fetch(buildUrl("/product_prices"), {
     method: "POST",
     headers: getAuthHeaders(token),

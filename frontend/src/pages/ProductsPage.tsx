@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { fetchProducts, createProduct } from "../services/ProductService";
 import { useAuth } from "../contexts/AuthContext";
 import type { Product } from "../types/product";
+import { Box, Typography, Button, TextField } from "@mui/material";
 
 export default function ProductsPage() {
   const { token } = useAuth();
@@ -37,30 +38,46 @@ export default function ProductsPage() {
   }
 
   return (
-    <div>
-      <h2>Products</h2>
-      <button onClick={handleRefreshProducts}>Refresh Products</button>
-      <ul>
-        {products.map((p) => (
-          <li key={p.id}>
-            ID: {p.id}, Name: {p.name}, user_id: {p.user_id}
-          </li>
-        ))}
-      </ul>
+    <Box sx={{ p: 2 }}>
+      <Typography variant="h5" sx={{ mb: 2 }}>
+        Products
+      </Typography>
 
-      <hr />
-      <h3>Create a new product</h3>
-      <form onSubmit={handleCreateProduct}>
-        <label>Product name:</label>
-        <br />
-        <input
-          type="text"
+      <Button
+        variant="contained"
+        onClick={handleRefreshProducts}
+        sx={{ mb: 2 }}
+      >
+        Refresh Products
+      </Button>
+
+      {/* List existing products */}
+      {products.map((p) => (
+        <Box key={p.id} sx={{ mb: 1 }}>
+          <Typography variant="body2">
+            ID: {p.id}, Name: {p.name}, user_id: {p.user_id}
+          </Typography>
+        </Box>
+      ))}
+
+      <Box component="form" onSubmit={handleCreateProduct} sx={{ mt: 3 }}>
+        <Typography variant="h6" sx={{ mb: 1 }}>
+          Create a new product
+        </Typography>
+
+        <TextField
+          label="Product Name"
+          variant="outlined"
+          size="small"
           value={productName}
           onChange={(e) => setProductName(e.target.value)}
+          sx={{ mb: 2, width: "300px" }}
         />
-        <br />
-        <button type="submit">Create Product</button>
-      </form>
-    </div>
+
+        <Button variant="contained" type="submit">
+          Create Product
+        </Button>
+      </Box>
+    </Box>
   );
 }

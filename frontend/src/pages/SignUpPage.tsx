@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { signUp } from "../services/AuthService";
 import type { NewUser } from "../types/auth";
+import { Box, Typography, TextField, Button } from "@mui/material";
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
@@ -29,26 +30,42 @@ export default function SignUpPage() {
   }
 
   return (
-    <div>
-      <h2>Sign Up</h2>
-      <form onSubmit={handleSignUp}>
-        <input
-          type="text"
-          placeholder="New user email"
+    <Box sx={{ p: 2 }}>
+      <Typography variant="h5" sx={{ mb: 2 }}>
+        Sign Up
+      </Typography>
+
+      <Box component="form" onSubmit={handleSignUp}>
+        <TextField
+          label="New user email"
+          type="email"
+          variant="outlined"
+          size="small"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          sx={{ mb: 2, width: "300px" }}
         />
-        <br />
-        <input
+
+        <TextField
+          label="New user password"
           type="password"
-          placeholder="New user password"
+          variant="outlined"
+          size="small"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          sx={{ mb: 2, width: "300px" }}
         />
-        <br />
-        <button type="submit">Sign Up</button>
-      </form>
-      <p>{message}</p>
-    </div>
+
+        <Button type="submit" variant="contained">
+          Sign Up
+        </Button>
+      </Box>
+
+      {message && (
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          {message}
+        </Typography>
+      )}
+    </Box>
   );
 }

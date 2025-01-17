@@ -2,15 +2,14 @@ import React, { useEffect, useState } from "react";
 import { fetchCategories, createCategory } from "../services/CategoryService";
 import { useAuth } from "../contexts/AuthContext";
 import type { Category, CategoryPayload } from "../types/category";
-import { Autocomplete } from "../components/Autocomplete/Autocomplete";
+import { Box, Typography, Button, TextField } from "@mui/material";
+import { AutocompleteMui } from "../components/Autocomplete/Autocomplete";
 
 export default function CategoriesPage() {
   const { token } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryName, setCategoryName] = useState("");
-  const [parentIdSelected, setParentIdSelected] = useState<number | undefined>(
-    undefined,
-  );
+  const [parentCategory, setParentCategory] = useState<Category | null>(null);
 
   useEffect(() => {
     if (token) {
@@ -35,7 +34,7 @@ export default function CategoriesPage() {
     }
     const payload: CategoryPayload = {
       name: categoryName,
-      parent_category_id: parentIdSelected,
+      parent_category_id: parentCategory?.id,
     };
     const success = await createCategory(token, payload);
     if (success) {
@@ -45,39 +44,55 @@ export default function CategoriesPage() {
   }
 
   return (
-    <div>
-      <h2>Categories</h2>
-      <button onClick={handleRefreshCategories}>Refresh Categories</button>
-      <ul>
-        {categories.map((cat) => (
-          <li key={cat.id}>
-            ID: {cat.id}, Name: {cat.name}, Parent: {cat.parent_id ?? "None"}
-          </li>
-        ))}
-      </ul>
+    <Box sx={{ p: 2 }}>
+      <Typography variant="h5" sx={{ mb: 2 }}>
+        Categories
+      </Typography>
 
-      <hr />
-      <h3>Create a new category</h3>
-      <form onSubmit={handleCreateCategory}>
-        <label>Category Name:</label>
-        <br />
-        <input
-          type="text"
+      <Button
+        variant="contained"
+        onClick={handleRefreshCategories}
+        sx={{ mb: 2 }}
+      >
+        Refresh Categories
+      </Button>
+
+      {/* List categories */}
+      {categories.map((cat) => (
+        <Box key={cat.id} sx={{ mb: 1 }}>
+          <Typography variant="body1">
+            ID: {cat.id}, Name: {cat.name}, Parent: {cat.parent_id ?? "None"}
+          </Typography>
+        </Box>
+      ))}
+
+      <Box component="form" onSubmit={handleCreateCategory} sx={{ mt: 3 }}>
+        <Typography variant="h6" sx={{ mb: 1 }}>
+          Create a new category
+        </Typography>
+
+        <TextField
+          label="Category Name"
+          variant="outlined"
+          size="small"
           value={categoryName}
           onChange={(e) => setCategoryName(e.target.value)}
+          sx={{ mb: 2, width: "300px" }}
         />
-        <br />
-        <label>Select Parent Category (optional):</label>
-        <Autocomplete<Category>
+
+        <AutocompleteMui<Category>
           items={categories}
-          placeholder="Type parent category name..."
-          getLabel={(cat) => cat.name}
-          getId={(cat) => cat.id || 0}
-          onSelect={(id, _name) => setParentIdSelected(id)}
+          getOptionLabel={(cat) =>
+            typeof cat === "object" && "name" in cat ? cat.name : String(cat)
+          }
+          onSelect={(selectedCat) => setParentCategory(selectedCat)}
+          label="Parent Category (optional)"
         />
-        <br />
-        <button type="submit">Create Category</button>
-      </form>
-    </div>
+
+        <Button type="submit" variant="contained">
+          Create Category
+        </Button>
+      </Box>
+    </Box>
   );
 }

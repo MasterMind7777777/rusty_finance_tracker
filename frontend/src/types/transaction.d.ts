@@ -2,7 +2,7 @@ export interface TransactionPayload {
   product_id?: number;
   category_id: number;
   transaction_type: string;
-  amount: number;
+  amount?: number;
   description: string;
   date: string;
 }
@@ -13,7 +13,7 @@ export interface Transaction {
   product_id?: number;
   category_id: number;
   transaction_type: string;
-  amount: number;
+  amount: float;
   description: string;
   date: string;
 }

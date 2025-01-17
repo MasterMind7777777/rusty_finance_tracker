@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { login } from "../services/AuthService";
 import { useAuth } from "../contexts/AuthContext";
+import { Box, Typography, TextField, Button } from "@mui/material";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { token, setToken } = useAuth();
+  const { setToken } = useAuth();
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -16,31 +17,36 @@ export default function LoginPage() {
   }
 
   return (
-    <div>
-      <h2>Login</h2>
-      <form onSubmit={handleLogin}>
-        <input
-          type="text"
-          placeholder="Email"
+    <Box sx={{ p: 2 }}>
+      <Typography variant="h5" sx={{ mb: 2 }}>
+        Login
+      </Typography>
+
+      <Box component="form" onSubmit={handleLogin}>
+        <TextField
+          label="Email"
+          type="email"
+          variant="outlined"
+          size="small"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          sx={{ mb: 2, width: "300px" }}
         />
-        <br />
-        <input
+
+        <TextField
+          label="Password"
           type="password"
-          placeholder="Password"
+          variant="outlined"
+          size="small"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          sx={{ mb: 2, width: "300px" }}
         />
-        <br />
-        <button type="submit">Log In</button>
-      </form>
 
-      {token ? (
-        <p style={{ color: "green" }}>Logged in. Token: {token}</p>
-      ) : (
-        <p style={{ color: "red" }}>Not logged in</p>
-      )}
-    </div>
+        <Button type="submit" variant="contained">
+          Log In
+        </Button>
+      </Box>
+    </Box>
   );
 }

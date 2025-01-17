@@ -7,6 +7,6 @@ export interface NewProductPrice {
 export interface ProductPrice {
   id?: number;
   product_id: number;
-  price: number;
+  price: float;
   created_at: string;
 }

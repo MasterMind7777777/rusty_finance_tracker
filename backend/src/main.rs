@@ -237,26 +237,67 @@ async fn list_product_prices(State(state): State<Arc<AppState>>) -> Json<Vec<Pro
 // POST /transactions -> create a transaction
 async fn create_transaction(
     State(state): State<Arc<AppState>>,
-    Extension(logged_in_user_id): Extension<i32>, // Renamed
+    Extension(logged_in_user_id): Extension<i32>,
     Json(payload): Json<TransactionPayload>,
-) -> &'static str {
+) -> Result<&'static str, &'static str> {
     let mut conn = get_connection(&state.db_url);
 
-    let new_tx = NewTransaction {
-        user_id: logged_in_user_id,
-        product_id: payload.product_id,
-        category_id: payload.category_id,
-        transaction_type: payload.transaction_type,
-        amount: payload.amount,
-        description: payload.description,
-        date: payload.date,
+    // Validate mandatory product_id
+    let product_id = match payload.product_id {
+        Some(id) => id,
+        None => return Err("Product ID is required"),
     };
 
+    // Validate transaction_type
+    match payload.transaction_type.as_str() {
+        "in" | "out" => {}
+        _ => return Err("Invalid transaction type. Must be 'in' or 'out'"),
+    }
+
+    // Optional: Handle amount if provided
+    if let Some(tx_amount) = payload.amount {
+        if tx_amount <= 0 {
+            return Err("Amount must be a positive integer");
+        }
+
+        // Create a new product price entry if needed
+        let new_product_price = NewProductPrice {
+            product_id,
+            price: tx_amount,
+            created_at: payload.date.clone(),
+        };
+
+        let price_insert_result = diesel::insert_into(schema::product_prices::table)
+            .values(&new_product_price)
+            .execute(&mut conn);
+
+        if price_insert_result.is_err() {
+            return Err("Failed to create product price");
+        }
+    }
+
+    // Prepare the new transaction
+    let new_tx = NewTransaction {
+        user_id: logged_in_user_id,
+        product_id,
+        category_id: payload.category_id,
+        transaction_type: payload.transaction_type.clone(),
+        description: payload.description.clone(),
+        date: payload.date.clone(),
+    };
+
+    // Insert the new transaction
     let insert_result = diesel::insert_into(schema::transactions::table)
         .values(&new_tx)
         .execute(&mut conn);
 
-    handle_unique_violation(insert_result, "transactions", "Transaction created")
+    match insert_result {
+        Ok(_) => Ok("Transaction created"),
+        Err(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
+            Err("Duplicate transaction entry")
+        }
+        Err(_) => Err("Failed to create transaction"),
+    }
 }
 
 // GET /transactions -> list all transactions

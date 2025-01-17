@@ -153,10 +153,9 @@ impl diesel::deserialize::FromSql<Text, Sqlite> for TransactionType {
 #[diesel(table_name = transactions)]
 pub struct NewTransaction {
     pub user_id: i32,
-    pub product_id: Option<i32>,
+    pub product_id: i32,
     pub category_id: Option<i32>,
     pub transaction_type: String, // e.g. "in" or "out"
-    pub amount: i32,
     pub description: Option<String>,
     pub date: String,
 }
@@ -167,7 +166,7 @@ pub struct TransactionPayload {
     pub product_id: Option<i32>,
     pub category_id: Option<i32>,
     pub transaction_type: String, // e.g. "in" or "out"
-    pub amount: i32,
+    pub amount: Option<i32>,
     pub description: Option<String>,
     pub date: String,
 }
@@ -176,10 +175,9 @@ pub struct TransactionPayload {
 pub struct Transaction {
     pub id: Option<i32>,
     pub user_id: i32,
-    pub product_id: Option<i32>,
+    pub product_id: i32,
     pub category_id: Option<i32>,
     pub transaction_type: String, // or TransactionType
-    pub amount: i32,
     pub description: Option<String>,
     pub date: String,
 }

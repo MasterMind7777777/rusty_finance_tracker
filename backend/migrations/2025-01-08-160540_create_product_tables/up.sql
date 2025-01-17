@@ -21,10 +21,9 @@ CREATE TABLE product_prices (
 CREATE TABLE transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
-    product_id INTEGER,             -- optional if some transactions are not tied to a specific product
+    product_id INTEGER NOT NULL,    -- optional if some transactions are not tied to a specific product
     category_id INTEGER,            -- optional if you want a category
     transaction_type TEXT NOT NULL, -- "in" or "out"
-    amount INTEGER NOT NULL,        -- in cents
     description TEXT,
     date TEXT NOT NULL,             -- e.g. ISO8601
     FOREIGN KEY (user_id) REFERENCES users (id),
