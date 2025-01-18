@@ -1,4 +1,10 @@
-import { createContext, useState, useContext, ReactNode } from "react";
+import {
+  createContext,
+  useState,
+  useContext,
+  ReactNode,
+  useEffect,
+} from "react";
 
 interface AuthContextValue {
   token: string | null;
@@ -11,7 +17,25 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setTokenState] = useState<string | null>(null);
+
+  // Load token from localStorage on initialization
+  useEffect(() => {
+    const storedToken = localStorage.getItem("authToken");
+    if (storedToken) {
+      setTokenState(storedToken);
+    }
+  }, []);
+
+  // Wrap setToken to update localStorage
+  const setToken = (newToken: string | null) => {
+    if (newToken) {
+      localStorage.setItem("authToken", newToken);
+    } else {
+      localStorage.removeItem("authToken");
+    }
+    setTokenState(newToken);
+  };
 
   return (
     <AuthContext.Provider value={{ token, setToken }}>

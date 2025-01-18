@@ -1,7 +1,7 @@
 -- Your SQL goes here
 -- Create tags table with user_id and unique constraint
 CREATE TABLE tags (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     user_id INTEGER NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,

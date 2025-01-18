@@ -2,60 +2,60 @@
 
 diesel::table! {
     categories (id) {
-        id -> Nullable<Integer>,
-        parent_category_id -> Nullable<Integer>,
+        id -> Int4,
+        parent_category_id -> Nullable<Int4>,
         name -> Text,
-        user_id -> Integer,
+        user_id -> Int4,
     }
 }
 
 diesel::table! {
     product_prices (id) {
-        id -> Nullable<Integer>,
-        product_id -> Integer,
-        price -> Integer,
-        created_at -> Text,
+        id -> Int4,
+        product_id -> Int4,
+        price -> Int4,
+        created_at -> Timestamp,
     }
 }
 
 diesel::table! {
     products (id) {
-        id -> Nullable<Integer>,
-        user_id -> Integer,
+        id -> Int4,
+        user_id -> Int4,
         name -> Text,
     }
 }
 
 diesel::table! {
     tags (id) {
-        id -> Nullable<Integer>,
+        id -> Int4,
         name -> Text,
-        user_id -> Integer,
+        user_id -> Int4,
     }
 }
 
 diesel::table! {
     transaction_tags (transaction_id, tag_id) {
-        transaction_id -> Integer,
-        tag_id -> Integer,
+        transaction_id -> Int4,
+        tag_id -> Int4,
     }
 }
 
 diesel::table! {
     transactions (id) {
-        id -> Nullable<Integer>,
-        user_id -> Integer,
-        product_id -> Integer,
-        category_id -> Nullable<Integer>,
+        id -> Int4,
+        user_id -> Int4,
+        product_id -> Int4,
+        category_id -> Nullable<Int4>,
         transaction_type -> Text,
         description -> Nullable<Text>,
-        date -> Text,
+        date -> Timestamp,
     }
 }
 
 diesel::table! {
     users (id) {
-        id -> Nullable<Integer>,
+        id -> Int4,
         email -> Text,
         password_hash -> Text,
     }

@@ -1,4 +1,3 @@
-// src/components/AutocompleteMui.tsx
 import { Autocomplete, TextField } from "@mui/material";
 
 /**
@@ -15,24 +14,24 @@ interface AutocompleteMuiProps<T> {
    */
   getOptionLabel: (option: T | string) => string;
   /**
-   * Callback invoked when the user selects an item from the dropdown.
-   * The entire object is returned for maximum flexibility.
+   * Callback invoked when the user selects an item from the dropdown
+   * or types in a new value (if allowNewValue=true).
    */
-  onSelect: (selected: T | null) => void;
+  onSelect: (selected: T | string | null) => void;
   /**
    * The label that appears on the text field (and as placeholder).
    */
   label?: string;
   /**
-   * Whether to allow free text input not in the items list.
-   * By default, we'll keep it false.
+   * Whether to allow a new, free-typed value that's not in the items list.
+   * If set to true, the autocomplete will pass that string to onSelect.
    */
-  freeSolo?: boolean;
+  allowNewValue?: boolean;
 }
 
 /**
- * A generic Material UI Autocomplete wrapper that returns the entire selected object.
- * This is more flexible than returning just (id, label).
+ * A generic Material UI Autocomplete wrapper that returns the entire selected object,
+ * or a newly typed string if `allowNewValue` is enabled.
  */
 export function AutocompleteMui<T>(
   props: AutocompleteMuiProps<T>,
@@ -42,37 +41,38 @@ export function AutocompleteMui<T>(
     getOptionLabel,
     onSelect,
     label = "Select an item",
-    freeSolo = false,
+    allowNewValue = false,
   } = props;
 
   return (
     <Autocomplete
       options={items}
-      getOptionLabel={getOptionLabel}
-      freeSolo={freeSolo}
+      getOptionLabel={(option) => getOptionLabel(option)}
+      freeSolo={allowNewValue}
       onChange={(_, newValue) => {
-        // If user clears the field or picks an item, newValue can be T or null (or string if freeSolo)
-        // We unify that by calling onSelect with either T or null.
-        // If freeSolo is true, newValue could be a string.
-        if (typeof newValue === "object" || newValue === null) {
-          onSelect(newValue as T | null);
-        } else {
-          // newValue is string in freeSolo scenario
+        // newValue can be:
+        //   - T (an existing item from 'items'),
+        //   - string (if allowNewValue=true and user typed something new),
+        //   - null (if cleared)
+        if (newValue === null) {
           onSelect(null);
+        } else if (typeof newValue === "object") {
+          // It's an existing item of type T
+          onSelect(newValue as T);
+        } else {
+          // newValue is a string
+          // If allowNewValue is true, we pass the string;
+          // otherwise, revert to null.
+          if (allowNewValue) {
+            onSelect(newValue);
+          } else {
+            onSelect(null);
+          }
         }
       }}
-      // Render the text field input
       renderInput={(params) => (
-        <TextField
-          {...params}
-          label={label}
-          size="small"
-          variant="outlined"
-          // You can add your sx here if needed
-        />
+        <TextField {...params} label={label} size="small" variant="outlined" />
       )}
-      // If you want to filter by getOptionLabel automatically, you can rely on default filterOptions
-      // or customize the filtering logic if needed.
     />
   );
 }

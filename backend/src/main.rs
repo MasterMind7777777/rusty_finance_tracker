@@ -1,3 +1,5 @@
+// main.rs
+
 mod auth;
 mod models;
 mod schema;
@@ -7,9 +9,9 @@ use std::sync::Arc;
 
 use axum::{extract::State, routing::post, Extension, Json, Router};
 use bcrypt::{hash, verify, DEFAULT_COST};
+use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel::result::{DatabaseErrorKind, Error as DieselError};
-use diesel::sqlite::SqliteConnection;
 use dotenvy::dotenv;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
@@ -19,7 +21,7 @@ use auth::{generate_jwt, require_auth};
 use models::{
     Category, CategoryPayload, LoginRequest, NewCategory, NewProduct, NewProductPrice,
     NewTransaction, NewUser, Product, ProductPayload, ProductPrice, Transaction,
-    TransactionPayload, User,
+    TransactionPayload, TransactionType, User,
 };
 
 #[cfg(test)]
@@ -31,9 +33,9 @@ pub struct AppState {
     db_url: String,
 }
 
-// Helper to get a Diesel connection
-fn get_connection(db_url: &str) -> SqliteConnection {
-    SqliteConnection::establish(db_url).unwrap_or_else(|_| panic!("Error connecting to {}", db_url))
+// Helper to get a Diesel connection (PostgreSQL)
+fn get_connection(db_url: &str) -> PgConnection {
+    PgConnection::establish(db_url).unwrap_or_else(|_| panic!("Error connecting to {}", db_url))
 }
 
 // A generic helper to handle unique constraint violations or other errors.
@@ -45,7 +47,6 @@ fn handle_unique_violation(
     match insert_result {
         Ok(_) => success_message,
         Err(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _info)) => {
-            // Return a string indicating which entity caused a duplicate
             match entity_name {
                 "users" => "A user with that email already exists",
                 "categories" => "Category already exists",
@@ -56,7 +57,6 @@ fn handle_unique_violation(
             }
         }
         Err(e) => {
-            // Keep the old panic for other kinds of errors
             panic!("Error inserting {}: {}", entity_name, e);
         }
     }
@@ -88,12 +88,12 @@ async fn sign_up(
 
 // POST /login -> returns a JWT if correct credentials
 async fn login(State(state): State<Arc<AppState>>, Json(payload): Json<LoginRequest>) -> String {
+    use schema::users::dsl::*;
     let mut conn = get_connection(&state.db_url);
 
-    use schema::users::dsl::*;
+    // Query a single user row; .optional() returns Ok(Some(u)) or Ok(None)
     let maybe_user = users
         .filter(email.eq(&payload.email))
-        .select(User::as_select())
         .first::<User>(&mut conn)
         .optional()
         .expect("Error querying user");
@@ -105,8 +105,8 @@ async fn login(State(state): State<Arc<AppState>>, Json(payload): Json<LoginRequ
                 verify(&payload.password_hash, &u.password_hash).unwrap_or(false);
 
             if password_matches {
-                // Generate a token
-                let token = generate_jwt(u.id.expect("User ID should exist"));
+                // Generate a token (u.id is now i32, so just pass it)
+                let token = generate_jwt(u.id);
                 format!("{{\"token\": \"{}\"}}", token)
             } else {
                 "Invalid email or password".to_string()
@@ -123,14 +123,13 @@ async fn login(State(state): State<Arc<AppState>>, Json(payload): Json<LoginRequ
 // POST /categories -> create a new category (requires valid token)
 async fn create_category(
     State(state): State<Arc<AppState>>,
-    Extension(logged_in_user_id): Extension<i32>, // Renamed from user_id
+    Extension(logged_in_user_id): Extension<i32>,
     Json(payload): Json<CategoryPayload>,
 ) -> String {
     let mut conn = get_connection(&state.db_url);
 
-    // Build the Diesel struct that includes the DB field user_id
     let new_cat = NewCategory {
-        user_id: logged_in_user_id, // reference the token’s user as user_id
+        user_id: logged_in_user_id,
         parent_category_id: payload.parent_category_id,
         name: payload.name,
     };
@@ -145,16 +144,14 @@ async fn create_category(
 // GET /categories -> list all categories (requires valid token)
 async fn list_categories(
     State(state): State<Arc<AppState>>,
-    Extension(logged_in_user_id): Extension<i32>, // Renamed from user_id
+    Extension(logged_in_user_id): Extension<i32>,
 ) -> Json<Vec<Category>> {
+    use schema::categories::dsl::*;
     let mut conn = get_connection(&state.db_url);
 
-    use schema::categories::dsl::*;
-    // Filter only the categories that match the logged-in user
     let results = categories
         .filter(user_id.eq(logged_in_user_id))
-        .select(Category::as_select())
-        .load(&mut conn)
+        .load::<Category>(&mut conn)
         .expect("Error loading categories");
 
     Json(results)
@@ -164,10 +161,10 @@ async fn list_categories(
 // ============ PRODUCT ENDPOINTS ============
 //
 
-// POST /products
+// POST /products -> create a product
 async fn create_product(
     State(state): State<Arc<AppState>>,
-    Extension(logged_in_user_id): Extension<i32>, // Renamed
+    Extension(logged_in_user_id): Extension<i32>,
     Json(payload): Json<ProductPayload>,
 ) -> String {
     let mut conn = get_connection(&state.db_url);
@@ -184,18 +181,17 @@ async fn create_product(
     handle_unique_violation(insert_result, "products", "Product created").to_string()
 }
 
-// GET /products
+// GET /products -> list all products
 async fn list_products(
     State(state): State<Arc<AppState>>,
-    Extension(logged_in_user_id): Extension<i32>, // Renamed
+    Extension(logged_in_user_id): Extension<i32>,
 ) -> Json<Vec<Product>> {
+    use schema::products::dsl::*;
     let mut conn = get_connection(&state.db_url);
 
-    use schema::products::dsl::*;
     let results = products
         .filter(user_id.eq(logged_in_user_id))
-        .select(Product::as_select())
-        .load(&mut conn)
+        .load::<Product>(&mut conn)
         .expect("Error loading products");
 
     Json(results)
@@ -203,8 +199,9 @@ async fn list_products(
 
 //
 // ============ PRODUCT PRICE ENDPOINTS ============
-// (No user_id field in product_prices, so no changes needed.)
+//
 
+// POST /product_prices -> create a product price
 async fn create_product_price(
     State(state): State<Arc<AppState>>,
     Json(pp): Json<NewProductPrice>,
@@ -218,13 +215,13 @@ async fn create_product_price(
     handle_unique_violation(insert_result, "product_prices", "Product price created").to_string()
 }
 
+// GET /product_prices -> list all product prices
 async fn list_product_prices(State(state): State<Arc<AppState>>) -> Json<Vec<ProductPrice>> {
+    use schema::product_prices::dsl::*;
     let mut conn = get_connection(&state.db_url);
 
-    use schema::product_prices::dsl::*;
     let results = product_prices
-        .select(ProductPrice::as_select())
-        .load(&mut conn)
+        .load::<ProductPrice>(&mut conn)
         .expect("Error loading product prices");
 
     Json(results)
@@ -240,6 +237,9 @@ async fn create_transaction(
     Extension(logged_in_user_id): Extension<i32>,
     Json(payload): Json<TransactionPayload>,
 ) -> Result<&'static str, &'static str> {
+    use schema::product_prices::dsl as pp_dsl;
+    use schema::transactions::dsl as tx_dsl;
+
     let mut conn = get_connection(&state.db_url);
 
     // Validate mandatory product_id
@@ -248,26 +248,26 @@ async fn create_transaction(
         None => return Err("Product ID is required"),
     };
 
-    // Validate transaction_type
-    match payload.transaction_type.as_str() {
-        "in" | "out" => {}
-        _ => return Err("Invalid transaction type. Must be 'in' or 'out'"),
+    // Validate transaction_type enum
+    if payload.transaction_type != TransactionType::Income
+        && payload.transaction_type != TransactionType::Expense
+    {
+        return Err("Invalid transaction type. Must be 'income' or 'expense'");
     }
 
-    // Optional: Handle amount if provided
+    // If an amount is provided, insert a corresponding product price
     if let Some(tx_amount) = payload.amount {
         if tx_amount <= 0 {
             return Err("Amount must be a positive integer");
         }
 
-        // Create a new product price entry if needed
         let new_product_price = NewProductPrice {
             product_id,
             price: tx_amount,
-            created_at: payload.date.clone(),
+            created_at: payload.date,
         };
 
-        let price_insert_result = diesel::insert_into(schema::product_prices::table)
+        let price_insert_result = diesel::insert_into(pp_dsl::product_prices)
             .values(&new_product_price)
             .execute(&mut conn);
 
@@ -281,13 +281,13 @@ async fn create_transaction(
         user_id: logged_in_user_id,
         product_id,
         category_id: payload.category_id,
-        transaction_type: payload.transaction_type.clone(),
+        transaction_type: payload.transaction_type,
         description: payload.description.clone(),
-        date: payload.date.clone(),
+        date: payload.date,
     };
 
     // Insert the new transaction
-    let insert_result = diesel::insert_into(schema::transactions::table)
+    let insert_result = diesel::insert_into(tx_dsl::transactions)
         .values(&new_tx)
         .execute(&mut conn);
 
@@ -303,15 +303,14 @@ async fn create_transaction(
 // GET /transactions -> list all transactions
 async fn list_transactions(
     State(state): State<Arc<AppState>>,
-    Extension(logged_in_user_id): Extension<i32>, // Renamed
+    Extension(logged_in_user_id): Extension<i32>,
 ) -> Json<Vec<Transaction>> {
+    use schema::transactions::dsl::*;
     let mut conn = get_connection(&state.db_url);
 
-    use schema::transactions::dsl::*;
     let results = transactions
         .filter(user_id.eq(logged_in_user_id))
-        .select(Transaction::as_select())
-        .load(&mut conn)
+        .load::<Transaction>(&mut conn)
         .expect("Error loading transactions");
 
     Json(results)
@@ -320,6 +319,7 @@ async fn list_transactions(
 //
 // ============ ROUTER + MAIN ============
 //
+
 pub fn main_router(shared_state: Arc<AppState>) -> Router {
     // Protected endpoints require valid token (JWT).
     let protected_routes = Router::new()
@@ -333,7 +333,8 @@ pub fn main_router(shared_state: Arc<AppState>) -> Router {
             "/transactions",
             post(create_transaction).get(list_transactions),
         )
-        .layer(axum::middleware::from_fn(require_auth)); // <--- apply JWT check
+        // This middleware ensures any request to these routes has a valid JWT
+        .layer(axum::middleware::from_fn(require_auth));
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -341,10 +342,10 @@ pub fn main_router(shared_state: Arc<AppState>) -> Router {
         .allow_headers(Any);
 
     Router::new()
-        // Public endpoints
+        // Public endpoints:
         .route("/users", post(sign_up))
         .route("/login", post(login))
-        // Protected
+        // Protected endpoints:
         .merge(protected_routes)
         .with_state(shared_state)
         .layer(cors)

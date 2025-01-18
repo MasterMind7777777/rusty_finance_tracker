@@ -4,30 +4,40 @@ import {
   fetchTransactions,
   createTransaction,
 } from "../services/TransactionService";
+import { fetchProducts } from "../services/ProductService";
+import { fetchCategories } from "../services/CategoryService";
+import { fetchProductPrices } from "../services/PriceService";
+
 import type { Transaction } from "../types/transaction";
 import type { Product } from "../types/product";
 import type { Category } from "../types/category";
-import { fetchProducts } from "../services/ProductService";
-import { fetchCategories } from "../services/CategoryService";
-import { Box, Typography, Button, TextField } from "@mui/material";
+import type { ProductPrice } from "../types/price";
+
+import {
+  Box,
+  Typography,
+  Button,
+  TextField,
+  Select,
+  MenuItem,
+} from "@mui/material";
 import { AutocompleteMui } from "../components/Autocomplete/Autocomplete";
 import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs, { Dayjs } from "dayjs";
-import { ProductPrice } from "../types/price";
-import { fetchProductPrices } from "../services/PriceService";
 
 export default function TransactionsPage() {
   const { token } = useAuth();
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [prices, setPrices] = useState<ProductPrice[]>([]);
 
-  const [txType, setTxType] = useState("expense");
+  const [txType, setTxType] = useState<"Expense" | "Income">("Expense");
   const [txAmount, setTxAmount] = useState("");
   const [txDescription, setTxDescription] = useState("");
-  const [txDate, setTxDate] = useState(dayjs());
+  const [txDate, setTxDate] = useState<Dayjs>(dayjs());
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedPrice, setSelectedPrice] = useState<ProductPrice | null>(null);
@@ -44,32 +54,81 @@ export default function TransactionsPage() {
     }
   }, [token]);
 
+  /**
+   * Fetch and set all transactions.
+   */
   async function handleRefreshTransactions() {
     if (!token) return;
-    const data = await fetchTransactions(token);
-    setTransactions(data);
+    try {
+      const data = await fetchTransactions(token);
+      setTransactions(data);
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+    }
   }
 
+  /**
+   * Fetch and set all products.
+   */
   async function handleRefreshProducts() {
     if (!token) return;
-    const data = await fetchProducts(token);
-    setProducts(data);
+    try {
+      const data = await fetchProducts(token);
+      setProducts(data);
+    } catch (error) {
+      console.error("Error fetching products:", error);
+    }
   }
 
+  /**
+   * Fetch and set all categories.
+   */
   async function handleRefreshCategories() {
     if (!token) return;
-    const data = await fetchCategories(token);
-    setCategories(data);
+    try {
+      const data = await fetchCategories(token);
+      setCategories(data);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+    }
   }
 
+  /**
+   * Fetch prices, remove duplicates (by product_id) and only keep the latest by created_at.
+   */
   async function handleRefreshPrices() {
     if (!token) return;
-    const data = await fetchProductPrices(token);
-    setPrices(data);
+    try {
+      const data = await fetchProductPrices(token);
+
+      // Group by product_id and only keep the latest price by created_at
+      const latestPricesMap = data.reduce((acc, price) => {
+        const existing = acc.get(price.product_id);
+        if (!existing) {
+          acc.set(price.product_id, price);
+        } else {
+          // Compare created_at to see which one is newer
+          if (dayjs(price.created_at).isAfter(dayjs(existing.created_at))) {
+            acc.set(price.product_id, price);
+          }
+        }
+        return acc;
+      }, new Map<number, ProductPrice>());
+
+      const uniquePrices = Array.from(latestPricesMap.values());
+      setPrices(uniquePrices);
+    } catch (error) {
+      console.error("Error fetching prices:", error);
+    }
   }
 
+  /**
+   * Create a new transaction.
+   * - If a price is selected, it overrides manually typed amount.
+   */
   async function handleCreateTransaction(e: React.FormEvent) {
     e.preventDefault();
+
     if (!token) {
       console.log("No token, please log in first.");
       return;
@@ -79,19 +138,41 @@ export default function TransactionsPage() {
       return;
     }
 
-    // if selectedPrice use it else amount
-    const success = await createTransaction(token, {
-      product_id: selectedProduct?.id || undefined,
-      category_id: selectedCategory.id,
-      transaction_type: txType,
-      amount: selectedPrice ? selectedPrice.price : parseFloat(txAmount),
-      description: txDescription,
-      date: txDate.toISOString(),
-    });
+    // Determine the final transaction amount
+    const finalAmount = selectedPrice
+      ? selectedPrice.price
+      : parseFloat(txAmount);
 
-    if (success) {
-      console.log("Transaction created. Refreshing...");
-      handleRefreshTransactions();
+    // If there's no valid amount, exit early
+    if (isNaN(finalAmount)) {
+      console.log("Please enter a valid amount or select a valid price.");
+      return;
+    }
+
+    try {
+      const success = await createTransaction(token, {
+        product_id: selectedProduct?.id || undefined,
+        category_id: selectedCategory.id,
+        transaction_type: txType,
+        amount: finalAmount,
+        description: txDescription.trim(),
+        date: txDate.format("YYYY-MM-DDTHH:mm:ss"),
+      });
+
+      if (success) {
+        console.log("Transaction created. Refreshing...");
+        handleRefreshTransactions();
+        // Reset form
+        setTxType("Expense");
+        setTxAmount("");
+        setTxDescription("");
+        setTxDate(dayjs());
+        setSelectedProduct(null);
+        setSelectedPrice(null);
+        setSelectedCategory(null);
+      }
+    } catch (error) {
+      console.error("Error creating transaction:", error);
     }
   }
 
@@ -125,15 +206,21 @@ export default function TransactionsPage() {
           Create a new transaction
         </Typography>
 
-        <TextField
-          label="Transaction Type"
-          variant="outlined"
-          size="small"
+        {/* Transaction Type */}
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Transaction Type
+        </Typography>
+        <Select
           value={txType}
-          onChange={(e) => setTxType(e.target.value)}
+          onChange={(e) => setTxType(e.target.value as "Expense" | "Income")}
           sx={{ mb: 2, width: "300px" }}
-        />
+          size="small"
+        >
+          <MenuItem value="Expense">Expense</MenuItem>
+          <MenuItem value="Income">Income</MenuItem>
+        </Select>
 
+        {/* Amount */}
         <TextField
           label="Amount"
           variant="outlined"
@@ -143,16 +230,18 @@ export default function TransactionsPage() {
           sx={{ mb: 2, width: "300px" }}
         />
 
-        {/* AutocompleteMui fot price */}
+        {/* Autocomplete for Price */}
         <AutocompleteMui<ProductPrice>
           items={prices}
           getOptionLabel={(p) =>
-            typeof p === "object" && "price" in p ? p.price : String(p)
+            typeof p === "object" && "price" in p ? String(p.price) : String(p)
           }
           onSelect={(p) => setSelectedPrice(p)}
-          label="Price"
+          label="Select Latest Price (optional)"
+          allowNewValue={false}
         />
 
+        {/* Description */}
         <TextField
           label="Description"
           variant="outlined"
@@ -162,20 +251,21 @@ export default function TransactionsPage() {
           sx={{ mb: 2, width: "300px" }}
         />
 
+        {/* Date */}
         <LocalizationProvider dateAdapter={AdapterDayjs}>
           <DatePicker
             label="Transaction Date"
-            value={txDate ? dayjs(txDate) : null}
-            onChange={(newValue: Dayjs | null) => {
-              if (!newValue) {
-                return;
+            value={txDate}
+            onChange={(newValue) => {
+              if (newValue) {
+                setTxDate(newValue);
               }
-              setTxDate(newValue);
             }}
             sx={{ mb: 2, width: "300px" }}
           />
         </LocalizationProvider>
 
+        {/* Product Selection (optional) */}
         <Typography variant="subtitle1" sx={{ mt: 1 }}>
           (Optional) Select Product
         </Typography>
@@ -186,8 +276,10 @@ export default function TransactionsPage() {
           }
           onSelect={(p) => setSelectedProduct(p)}
           label="Product"
+          allowNewValue={false}
         />
 
+        {/* Category Selection (required) */}
         <Typography variant="subtitle1" sx={{ mt: 1 }}>
           Select Category (required)
         </Typography>
@@ -198,9 +290,10 @@ export default function TransactionsPage() {
           }
           onSelect={(c) => setSelectedCategory(c)}
           label="Category"
+          allowNewValue={false}
         />
 
-        <Button variant="contained" type="submit">
+        <Button variant="contained" type="submit" sx={{ mt: 2 }}>
           Create Transaction
         </Button>
       </Box>

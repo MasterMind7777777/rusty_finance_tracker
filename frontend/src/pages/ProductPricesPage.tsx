@@ -64,7 +64,9 @@ export default function ProductPricesPage() {
     }
 
     // Convert the Dayjs date to a string your backend expects (e.g. YYYY-MM-DD)
-    const createdAtStr = createdAt ? createdAt.format("YYYY-MM-DD") : "";
+    const createdAtStr = createdAt
+      ? createdAt.format("YYYY-MM-DDTHH:mm:ss")
+      : "";
 
     const success = await createProductPrice(token, {
       product_id: selectedProduct.id,

@@ -16,15 +16,19 @@ export async function fetchCategories(token: string): Promise<Category[]> {
 export async function createCategory(
   token: string,
   payload: CategoryPayload,
-): Promise<boolean> {
+): Promise<Category | null> {
   const res = await fetch(buildUrl("/categories"), {
     method: "POST",
     headers: getAuthHeaders(token),
     body: JSON.stringify(payload),
   });
+
   if (!res.ok) {
     console.error("Category creation error:", await res.text());
-    return false;
+    return null;
   }
-  return true;
+
+  // Parse the newly created category from the response
+  const newCat: Category = await res.json();
+  return newCat;
 }
