@@ -1,15 +1,18 @@
--- Your SQL goes here
 -- We'll assume there's already a 'users' table and 'categories' table
--- that each reference user_id. Now, create three new tables: products, product_prices, transactions.
+-- that each reference user_id. Now, we create or recreate:
 
+-- 1) Products table with a new optional 'category_id' reference.
 CREATE TABLE products (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
+    category_id INTEGER,           -- optional link to categories
     name TEXT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users (id),
+    FOREIGN KEY (category_id) REFERENCES categories (id),
     UNIQUE (user_id, name)
 );
 
+-- 2) Product prices remain the same
 CREATE TABLE product_prices (
     id SERIAL PRIMARY KEY,
     product_id INTEGER NOT NULL,
@@ -18,15 +21,14 @@ CREATE TABLE product_prices (
     FOREIGN KEY (product_id) REFERENCES products (id)
 );
 
+-- 3) Transactions table without the 'category_id' column.
 CREATE TABLE transactions (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
-    product_id INTEGER NOT NULL,    -- optional if some transactions are not tied to a specific product
-    category_id INTEGER,            -- optional if you want a category
-    transaction_type TEXT NOT NULL, -- "in" or "out"
+    product_id INTEGER NOT NULL,    -- if a transaction must always tie to a product
+    transaction_type TEXT NOT NULL, -- e.g. "in" or "out"
     description TEXT,
-    date TIMESTAMP NOT NULL,        -- PostgreSQL TIMESTAMP instead of TEXT
+    date TIMESTAMP NOT NULL,        -- PostgreSQL TIMESTAMP
     FOREIGN KEY (user_id) REFERENCES users (id),
-    FOREIGN KEY (product_id) REFERENCES products (id),
-    FOREIGN KEY (category_id) REFERENCES categories (id)
+    FOREIGN KEY (product_id) REFERENCES products (id)
 );

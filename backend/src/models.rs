@@ -16,8 +16,6 @@ use chrono::NaiveDateTime;
 #[derive(Selectable, Queryable, Serialize, Deserialize, Debug)]
 #[diesel(table_name = users)]
 pub struct User {
-    // Because `users.id` is NOT NULL in the DB schema,
-    // we store it as `i32`, not `Option<i32>`.
     pub id: i32,
     pub email: String,
     pub password_hash: String,
@@ -72,9 +70,9 @@ pub struct CategoryPayload {
 #[derive(Selectable, Queryable, Serialize, Deserialize, Debug)]
 #[diesel(table_name = products)]
 pub struct Product {
-    // `products.id` is NOT NULL -> use `i32`
     pub id: i32,
     pub user_id: i32,
+    pub category_id: Option<i32>, // <-- ADDED: product references category
     pub name: String,
 }
 
@@ -82,12 +80,14 @@ pub struct Product {
 #[diesel(table_name = products)]
 pub struct NewProduct {
     pub user_id: i32,
+    pub category_id: Option<i32>, // <-- ADDED
     pub name: String,
 }
 
 // Payload for creation
 #[derive(Deserialize)]
 pub struct ProductPayload {
+    pub category_id: Option<i32>, // <-- ADDED if you want to set category on creation
     pub name: String,
 }
 
@@ -98,7 +98,6 @@ pub struct ProductPayload {
 #[derive(Selectable, Queryable, Serialize, Deserialize, Debug)]
 #[diesel(table_name = product_prices)]
 pub struct ProductPrice {
-    // `product_prices.id` is NOT NULL -> use `i32`
     pub id: i32,
     pub product_id: i32,
     pub price: i32,
@@ -156,11 +155,9 @@ impl diesel::deserialize::FromSql<Text, diesel::pg::Pg> for TransactionType {
 #[derive(Selectable, Queryable, Serialize, Deserialize, Debug)]
 #[diesel(table_name = transactions)]
 pub struct Transaction {
-    // `transactions.id` is NOT NULL -> use `i32`
     pub id: i32,
     pub user_id: i32,
     pub product_id: i32,
-    pub category_id: Option<i32>,
     pub transaction_type: TransactionType,
     pub description: Option<String>,
     pub date: NaiveDateTime,
@@ -171,7 +168,6 @@ pub struct Transaction {
 pub struct NewTransaction {
     pub user_id: i32,
     pub product_id: i32,
-    pub category_id: Option<i32>,
     pub transaction_type: TransactionType,
     pub description: Option<String>,
     pub date: NaiveDateTime,
@@ -180,11 +176,22 @@ pub struct NewTransaction {
 // What the client sends when creating a transaction
 #[derive(Deserialize)]
 pub struct TransactionPayload {
-    // Optional because user might not know the product yet
-    pub product_id: Option<i32>,
-    pub category_id: Option<i32>,
+    pub product_id: Option<i32>, // optional if user can skip
     pub transaction_type: TransactionType,
-    pub amount: Option<i32>,
+    pub amount: Option<i32>, // optional if user wants to store price
     pub description: Option<String>,
     pub date: NaiveDateTime,
+}
+
+#[derive(Serialize)]
+pub struct TransactionDto {
+    pub id: i32,
+    pub user_id: i32,
+    pub product_id: i32,
+    pub category_id: Option<i32>,
+    pub transaction_type: TransactionType,
+    pub description: Option<String>,
+    pub date: chrono::NaiveDateTime,
+    // Additional fields we fetch via left joins
+    pub amount: Option<i32>,
 }

@@ -19,6 +19,11 @@ interface AutocompleteMuiProps<T> {
    */
   onSelect: (selected: T | string | null) => void;
   /**
+   * Optional callback invoked whenever the text field value changes.
+   * Receives the raw input string typed by the user.
+   */
+  onInputChange?: (value: string) => void;
+  /**
    * The label that appears on the text field (and as placeholder).
    */
   label?: string;
@@ -40,6 +45,7 @@ export function AutocompleteMui<T>(
     items,
     getOptionLabel,
     onSelect,
+    onInputChange,
     label = "Select an item",
     allowNewValue = false,
   } = props;
@@ -49,6 +55,7 @@ export function AutocompleteMui<T>(
       options={items}
       getOptionLabel={(option) => getOptionLabel(option)}
       freeSolo={allowNewValue}
+      // Called whenever the selected item changes (including new typed string).
       onChange={(_, newValue) => {
         // newValue can be:
         //   - T (an existing item from 'items'),
@@ -61,13 +68,17 @@ export function AutocompleteMui<T>(
           onSelect(newValue as T);
         } else {
           // newValue is a string
-          // If allowNewValue is true, we pass the string;
-          // otherwise, revert to null.
           if (allowNewValue) {
             onSelect(newValue);
           } else {
             onSelect(null);
           }
+        }
+      }}
+      // Called on every keystroke input change
+      onInputChange={(_event, inputValue) => {
+        if (onInputChange) {
+          onInputChange(inputValue);
         }
       }}
       renderInput={(params) => (

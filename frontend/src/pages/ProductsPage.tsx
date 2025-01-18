@@ -20,8 +20,12 @@ export default function ProductsPage() {
       console.log("No token, can't fetch products.");
       return;
     }
-    const data = await fetchProducts(token);
-    setProducts(data);
+    try {
+      const data = await fetchProducts(token);
+      setProducts(data);
+    } catch (err) {
+      console.error("Failed to fetch products:", err);
+    }
   }
 
   async function handleCreateProduct(e: React.FormEvent) {
@@ -30,10 +34,26 @@ export default function ProductsPage() {
       console.log("No token, please log in.");
       return;
     }
-    const success = await createProduct(token, { name: productName });
-    if (success) {
-      console.log("Product created. Refreshing...");
-      handleRefreshProducts();
+    if (!productName.trim()) {
+      console.log("Product name is empty, please enter a name.");
+      return;
+    }
+    try {
+      // createProduct now returns the newly created Product object
+      const newProd = await createProduct(token, { name: productName });
+
+      if (!newProd) {
+        console.error("Product creation failed.");
+        return;
+      }
+
+      console.log("Product created:", newProd);
+      // Refresh or push into local state
+      setProducts([...products, newProd]);
+      // Clear input
+      setProductName("");
+    } catch (error) {
+      console.error("Error creating product:", error);
     }
   }
 
@@ -60,6 +80,7 @@ export default function ProductsPage() {
         </Box>
       ))}
 
+      {/* Form to create a product */}
       <Box component="form" onSubmit={handleCreateProduct} sx={{ mt: 3 }}>
         <Typography variant="h6" sx={{ mb: 1 }}>
           Create a new product
