@@ -17,11 +17,8 @@ import {
   fetchTransactions,
   createTransaction,
 } from "../services/TransactionService";
-import { fetchProducts, createProduct } from "../services/ProductService";
-import {
-  fetchProductPrices,
-  createProductPrice,
-} from "../services/PriceService";
+import { fetchProducts } from "../services/ProductService";
+import { fetchProductPrices } from "../services/PriceService";
 
 // Types from your codebase
 import type { Transaction } from "../types/transaction";
@@ -34,17 +31,19 @@ import { AutocompleteMui } from "../components/Autocomplete/Autocomplete";
 
 /**
  * TransactionsPage:
- *   - transaction_type: "income" | "expense"
- *   - amount can be typed or come from a known ProductPrice
+ *   - transaction_type: "Income" | "Expense"
+ *   - amount can be typed (float) or come from an existing ProductPrice
  *   - product can be selected from existing or typed new
- *   - if user types a new "price" in the Autocomplete, we create it on the fly (once we know product_id + date)
+ *   - if user types a new "price" in the Autocomplete, we pass it to the backend in one request
+ *   - if user picks an existing product_price_id, we pass that
+ *   - the backend handles creation of any needed entities in a single transaction
  */
 export default function TransactionsPage() {
   const { token } = useAuth();
 
   // Transaction form fields
   const [txType, setTxType] = useState<"Income" | "Expense">("Expense");
-  const [txAmount, setTxAmount] = useState("");
+  const [txAmount, setTxAmount] = useState(""); // fallback typed amount in float form
   const [txDescription, setTxDescription] = useState("");
   const [txDate, setTxDate] = useState<Dayjs>(dayjs());
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -62,6 +61,9 @@ export default function TransactionsPage() {
   // Avoid double creation in Strict Mode
   const creatingRef = useRef(false);
 
+  // ==============================
+  // Fetch existing data
+  // ==============================
   useEffect(() => {
     if (token) {
       handleRefreshTransactions();
@@ -70,9 +72,6 @@ export default function TransactionsPage() {
     }
   }, [token]);
 
-  // ==============================
-  // Fetching
-  // ==============================
   async function handleRefreshTransactions() {
     if (!token) return;
     try {
@@ -118,128 +117,85 @@ export default function TransactionsPage() {
   }
 
   // ==============================
-  // Helpers
-  // ==============================
-
-  /**
-   * If user typed a new product name, create it on the fly.
-   * Otherwise, use the selected product.
-   */
-  async function ensureProduct(): Promise<Product | null> {
-    if (!token) return null;
-    if (selectedProduct) return selectedProduct;
-
-    if (productInput.trim()) {
-      if (creatingRef.current) {
-        console.log("Skipping duplicate product creation call...");
-        return null;
-      }
-      creatingRef.current = true;
-
-      try {
-        const newProd = await createProduct(token, {
-          name: productInput.trim(),
-        });
-        if (!newProd) {
-          console.error("Failed to create product");
-          return null;
-        }
-        setProducts((prev) => [...prev, newProd]);
-        setSelectedProduct(newProd);
-        return newProd;
-      } catch (err) {
-        console.error("Error creating product:", err);
-        return null;
-      } finally {
-        creatingRef.current = false;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * If user typed a new "price" in the Autocomplete for ProductPrice,
-   * create a new ProductPrice once we know product_id + date.
-   */
-  async function ensurePrice(product_id: number, date: Dayjs): Promise<number> {
-    // If user selected an existing ProductPrice, use that
-    if (selectedPrice) {
-      return selectedPrice.price;
-    }
-
-    // If user typed something in `priceInput`, create a new ProductPrice
-    const typed = priceInput.trim();
-    if (typed) {
-      const parsed = parseInt(typed, 10);
-      if (isNaN(parsed) || parsed <= 0) {
-        console.log("Invalid typed price, ignoring...");
-        return 0;
-      }
-      // We have a valid typed price, create it in the backend
-      try {
-        const created = await createProductPrice(token!, {
-          product_id,
-          price: parsed,
-          created_at: date.format("YYYY-MM-DDTHH:mm:ss"),
-        });
-        if (created) {
-          console.log("Typed product price created:", created);
-          // Possibly store it in `prices` if you want
-          setPrices((prev) => [...prev, created]);
-          return created.price;
-        }
-      } catch (err) {
-        console.error("Error creating typed product price:", err);
-      }
-    }
-
-    // If no typed price or creation failed, fallback
-    return 0;
-  }
-
-  // ==============================
-  // Create Transaction
+  // Create Transaction (single request)
   // ==============================
   async function handleCreateTransaction(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
 
+    // Prevent double-click in Strict Mode (or repeated calls)
+    if (creatingRef.current) {
+      console.log("Skipping transaction creation; already creating...");
+      return;
+    }
+    creatingRef.current = true;
+
     try {
-      // Ensure product
-      const prod = await ensureProduct();
-      if (!prod?.id) {
-        console.log(
-          "No product selected or created, cannot create transaction.",
-        );
+      // 1) Determine product_id or product_name
+      let finalProductId: number | undefined;
+      let finalProductName: string | undefined;
+      if (selectedProduct) {
+        finalProductId = selectedProduct.id;
+      } else if (productInput.trim()) {
+        finalProductName = productInput.trim();
+      } else {
+        console.log("No product selected or typed. Cannot create transaction.");
         return;
       }
 
-      // Compute final date string
+      // 2) Determine product_price_id or amount
+      let finalPriceId: number | undefined;
+      let finalAmount: number | undefined;
+
+      if (selectedPrice) {
+        // User picked an existing ProductPrice
+        finalPriceId = selectedPrice.id;
+      } else if (priceInput.trim()) {
+        // User typed a new price
+        const parsedFloat = parseFloat(priceInput.trim());
+        if (!isNaN(parsedFloat) && parsedFloat > 0) {
+          finalAmount = parsedFloat; // We'll send a float to the backend
+        } else {
+          console.log("Invalid typed price, cannot create transaction.");
+          return;
+        }
+      } else {
+        // Fallback: if user typed something in `txAmount` (manual field)
+        if (txAmount.trim()) {
+          const parsedFallback = parseFloat(txAmount.trim());
+          if (!isNaN(parsedFallback) && parsedFallback > 0) {
+            finalAmount = parsedFallback;
+          } else {
+            console.log("Invalid fallback amount, cannot create transaction.");
+            return;
+          }
+        } else {
+          console.log(
+            "No existing or new price was provided. Cannot create transaction.",
+          );
+          return;
+        }
+      }
+
+      // 3) Build final payload
       const dateStr = txDate.format("YYYY-MM-DDTHH:mm:ss");
-      // Possibly create a new typed ProductPrice if needed
-      const finalAmount = await ensurePrice(prod.id, txDate);
-
-      if (!finalAmount) {
-        console.log("No valid final amount typed or selected, skipping...");
-        return;
-      }
-
-      // Build payload
       const payload: TransactionPayload = {
-        product_id: prod.id,
-        transaction_type: txType, // "income" or "expense"
-        amount: finalAmount,
+        product_id: finalProductId,
+        product_name: finalProductName,
+        product_price_id: finalPriceId,
+        amount: finalAmount, // Only if we're creating a new product_price
+        transaction_type: txType,
         description: txDescription.trim(),
         date: dateStr,
       };
 
-      // Call createTransaction
+      // 4) Call createTransaction (single backend request)
       const success = await createTransaction(token, payload);
       if (success) {
         console.log("Transaction created. Refreshing...");
         handleRefreshTransactions();
 
-        // Reset
+        // Reset form
         setTxType("Expense");
         setTxAmount("");
         setTxDescription("");
@@ -251,6 +207,9 @@ export default function TransactionsPage() {
       }
     } catch (err) {
       console.error("Error creating transaction:", err);
+    } finally {
+      // Unlock
+      creatingRef.current = false;
     }
   }
 
@@ -271,6 +230,7 @@ export default function TransactionsPage() {
         Refresh Transactions
       </Button>
 
+      {/* List existing transactions */}
       {transactions.map((tx) => (
         <Box key={tx.id} sx={{ mb: 1 }}>
           <Typography variant="body2">
@@ -281,6 +241,7 @@ export default function TransactionsPage() {
         </Box>
       ))}
 
+      {/* Form to create a new transaction */}
       <Box component="form" onSubmit={handleCreateTransaction} sx={{ mt: 3 }}>
         <Typography variant="h6" sx={{ mb: 1 }}>
           Create a new transaction
@@ -300,9 +261,9 @@ export default function TransactionsPage() {
           <MenuItem value="Income">Income</MenuItem>
         </Select>
 
-        {/* (Fallback) Manual numeric amount if typed, but we'll let typed ProductPrice override */}
+        {/* Fallback manual numeric amount (float) */}
         <TextField
-          label="Fallback Amount (optional)"
+          label="Fallback Amount (float)"
           variant="outlined"
           size="small"
           value={txAmount}
@@ -310,7 +271,7 @@ export default function TransactionsPage() {
           sx={{ mb: 2, width: "300px" }}
         />
 
-        {/* Autocomplete for ProductPrice (allowNewValue=true => user can type a new price) */}
+        {/* Autocomplete for existing or new Price */}
         <AutocompleteMui<ProductPrice>
           items={prices}
           getOptionLabel={(option) => {
@@ -320,7 +281,6 @@ export default function TransactionsPage() {
             return String(option.price); // existing ProductPrice
           }}
           onSelect={(val) => {
-            // val can be string | ProductPrice | null
             if (!val) {
               // cleared
               setSelectedPrice(null);
@@ -364,13 +324,12 @@ export default function TransactionsPage() {
           />
         </LocalizationProvider>
 
-        {/* Product */}
+        {/* Product (existing or new) */}
         <Typography variant="subtitle1" sx={{ mt: 1 }}>
           Select or Type Product (required)
         </Typography>
         <AutocompleteMui<Product>
           items={products}
-          // If user typed new, or selected existing
           getOptionLabel={(option) => {
             if (typeof option === "string") {
               return option;
@@ -379,12 +338,15 @@ export default function TransactionsPage() {
           }}
           onSelect={(val) => {
             if (!val) {
+              // cleared
               setSelectedProduct(null);
               setProductInput("");
             } else if (typeof val === "string") {
+              // typed new product
               setSelectedProduct(null);
               setProductInput(val);
             } else {
+              // existing product
               setSelectedProduct(val);
               setProductInput("");
             }

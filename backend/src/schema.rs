@@ -47,6 +47,7 @@ diesel::table! {
         id -> Int4,
         user_id -> Int4,
         product_id -> Int4,
+        product_price_id -> Int4,
         transaction_type -> Text,
         description -> Nullable<Text>,
         date -> Timestamp,
@@ -68,6 +69,7 @@ diesel::joinable!(products -> users (user_id));
 diesel::joinable!(tags -> users (user_id));
 diesel::joinable!(transaction_tags -> tags (tag_id));
 diesel::joinable!(transaction_tags -> transactions (transaction_id));
+diesel::joinable!(transactions -> product_prices (product_price_id));
 diesel::joinable!(transactions -> products (product_id));
 diesel::joinable!(transactions -> users (user_id));
 

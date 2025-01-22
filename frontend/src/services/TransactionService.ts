@@ -1,5 +1,9 @@
 import { buildUrl, getAuthHeaders } from "./api";
-import type { Transaction, TransactionPayload } from "../types/transaction";
+import type {
+  CreatedTransaction,
+  Transaction,
+  TransactionPayload,
+} from "../types/transaction";
 
 export async function fetchTransactions(token: string): Promise<Transaction[]> {
   const res = await fetch(buildUrl("/transactions"), {
@@ -14,28 +18,33 @@ export async function fetchTransactions(token: string): Promise<Transaction[]> {
   // Convert cents to dollars for frontend
   return transactions.map((transaction: Transaction) => ({
     ...transaction,
-    amount: transaction.amount / 100,
+    amount: transaction.amount ? transaction.amount / 100 : 0,
   }));
 }
 
 export async function createTransaction(
   token: string,
   payload: TransactionPayload,
-): Promise<boolean> {
-  // Convert dollars to cents for backend
-  const backendPayload = {
-    ...payload,
-    amount: payload.amount ? Math.round(payload.amount * 100) : null,
-  };
+): Promise<CreatedTransaction> {
+  // Convert amount to cents if present
+  if (payload.amount) {
+    payload.amount = Math.round(payload.amount * 100);
+  }
 
   const res = await fetch(buildUrl("/transactions"), {
     method: "POST",
-    headers: getAuthHeaders(token),
-    body: JSON.stringify(backendPayload),
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
   });
+
   if (!res.ok) {
-    console.error("Transaction creation error:", await res.text());
-    return false;
+    const msg = await res.text();
+    throw new Error(`Transaction creation error: ${msg}`);
   }
-  return true;
+
+  const data: CreatedTransaction = await res.json();
+  return data;
 }

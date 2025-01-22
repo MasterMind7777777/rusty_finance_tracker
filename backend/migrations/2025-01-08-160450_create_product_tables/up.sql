@@ -12,23 +12,27 @@ CREATE TABLE products (
     UNIQUE (user_id, name)
 );
 
--- 2) Product prices remain the same
+-- 2) Product prices table, now with a UNIQUE constraint on (product_id, price, created_at)
 CREATE TABLE product_prices (
     id SERIAL PRIMARY KEY,
     product_id INTEGER NOT NULL,
-    price INTEGER NOT NULL,         -- store as an integer (cents) to avoid float issues
-    created_at TIMESTAMP NOT NULL,  -- PostgreSQL has a native TIMESTAMP type
-    FOREIGN KEY (product_id) REFERENCES products (id)
+    price INTEGER NOT NULL,         -- store as an integer (cents)
+    created_at TIMESTAMP NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES products (id),
+    UNIQUE (product_id, price, created_at)
 );
 
--- 3) Transactions table without the 'category_id' column.
+-- 3) Transactions table - now includes product_price_id
 CREATE TABLE transactions (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
-    product_id INTEGER NOT NULL,    -- if a transaction must always tie to a product
-    transaction_type TEXT NOT NULL, -- e.g. "in" or "out"
+    product_id INTEGER NOT NULL,
+    product_price_id INTEGER NOT NULL,               -- <--- NEW COLUMN
+    transaction_type TEXT NOT NULL,         -- e.g., "income" or "expense"
     description TEXT,
-    date TIMESTAMP NOT NULL,        -- PostgreSQL TIMESTAMP
+    date TIMESTAMP NOT NULL,                -- Postgres TIMESTAMP
     FOREIGN KEY (user_id) REFERENCES users (id),
-    FOREIGN KEY (product_id) REFERENCES products (id)
+    FOREIGN KEY (product_id) REFERENCES products (id),
+    FOREIGN KEY (product_price_id) REFERENCES product_prices (id),
+    UNIQUE (user_id, product_id, date, transaction_type)
 );

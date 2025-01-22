@@ -158,6 +158,7 @@ pub struct Transaction {
     pub id: i32,
     pub user_id: i32,
     pub product_id: i32,
+    pub product_price_id: i32,
     pub transaction_type: TransactionType,
     pub description: Option<String>,
     pub date: NaiveDateTime,
@@ -168,6 +169,7 @@ pub struct Transaction {
 pub struct NewTransaction {
     pub user_id: i32,
     pub product_id: i32,
+    pub product_price_id: i32,
     pub transaction_type: TransactionType,
     pub description: Option<String>,
     pub date: NaiveDateTime,
@@ -177,8 +179,10 @@ pub struct NewTransaction {
 #[derive(Deserialize)]
 pub struct TransactionPayload {
     pub product_id: Option<i32>, // optional if user can skip
-    pub transaction_type: TransactionType,
+    pub product_name: Option<String>,
+    pub product_price_id: Option<i32>,
     pub amount: Option<i32>, // optional if user wants to store price
+    pub transaction_type: TransactionType,
     pub description: Option<String>,
     pub date: NaiveDateTime,
 }

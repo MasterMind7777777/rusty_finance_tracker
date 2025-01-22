@@ -281,66 +281,102 @@ async fn list_product_prices(State(state): State<Arc<AppState>>) -> Json<Vec<Pro
 //  TRANSACTION ENDPOINTS
 // ===============================
 
+/// Create a transaction, referencing either `product_price_id`
+/// or creating a new price if an `amount` is given.
 async fn create_transaction(
     State(state): State<Arc<AppState>>,
     Extension(logged_in_user_id): Extension<i32>,
     Json(payload): Json<TransactionPayload>,
 ) -> JsonResult<Transaction> {
-    use schema::product_prices::dsl as pp_dsl;
-    use schema::transactions::dsl as tx_dsl;
+    use schema::product_prices::dsl as pp;
+    use schema::products::dsl as pr;
+    use schema::transactions::dsl as tx;
+
     let mut conn = get_connection(&state.db_url);
 
-    let product_id = match payload.product_id {
-        Some(id) => id,
-        None => return Err(error_response("Product ID is required")),
-    };
+    let result = conn.transaction::<Transaction, DieselError, _>(|txn_conn| {
+        // 1) figure out product_id:
+        let final_product_id = match payload.product_id {
+            Some(existing_pid) => existing_pid,
+            None => {
+                // must create new product, or fail if no product_name
+                let name = payload
+                    .product_name
+                    .as_ref()
+                    .ok_or_else(|| DieselError::RollbackTransaction)?
+                    .trim();
+                if name.is_empty() {
+                    return Err(DieselError::RollbackTransaction);
+                }
 
-    if payload.transaction_type != TransactionType::Income
-        && payload.transaction_type != TransactionType::Expense
-    {
-        return Err(error_response(
-            "Invalid transaction type. Must be 'income' or 'expense'",
-        ));
-    }
+                // Insert new product:
+                let new_prod = NewProduct {
+                    user_id: logged_in_user_id,
+                    category_id: None, // or your logic
+                    name: name.to_string(),
+                };
 
-    // If an amount is provided, store a product price
-    if let Some(tx_amount) = payload.amount {
-        if tx_amount <= 0 {
-            return Err(error_response("Amount must be a positive integer"));
-        }
-
-        let new_price = NewProductPrice {
-            product_id,
-            price: tx_amount,
-            created_at: payload.date,
+                diesel::insert_into(pr::products)
+                    .values(&new_prod)
+                    .returning(pr::id)
+                    .get_result::<i32>(txn_conn)?
+            }
         };
 
-        diesel::insert_into(pp_dsl::product_prices)
-            .values(&new_price)
-            .execute(&mut conn)
-            .map_err(|_| error_response("Failed to create product price"))?;
-    }
-
-    let new_tx = NewTransaction {
-        user_id: logged_in_user_id,
-        product_id,
-        transaction_type: payload.transaction_type,
-        description: payload.description.clone(),
-        date: payload.date,
-    };
-
-    let inserted_tx = diesel::insert_into(tx_dsl::transactions)
-        .values(&new_tx)
-        .get_result::<Transaction>(&mut conn)
-        .map_err(|e| {
-            if let DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _) = e {
-                error_response("Duplicate transaction entry")
-            } else {
-                error_response(format!("Failed to create transaction: {e}"))
+        // 2) figure out product_price_id:
+        //    Prioritize product_price_id if provided:
+        let final_price_id = if let Some(pp_id) = payload.product_price_id {
+            // Optionally verify that pp_id belongs to final_product_id, etc.
+            pp_id
+        } else {
+            // Otherwise, create a new product_price if 'amount' is Some
+            let cents = payload
+                .amount
+                .ok_or_else(|| DieselError::RollbackTransaction)?;
+            if cents <= 0 {
+                return Err(DieselError::RollbackTransaction);
             }
-        })?;
 
-    Ok(Json(inserted_tx))
+            let new_price = NewProductPrice {
+                product_id: final_product_id,
+                price: cents,
+                created_at: payload.date,
+            };
+
+            diesel::insert_into(pp::product_prices)
+                .values(&new_price)
+                .returning(pp::id)
+                .get_result::<i32>(txn_conn)?
+        };
+
+        // 3) insert transaction referencing product_price_id (not null)
+        let new_tx = NewTransaction {
+            user_id: logged_in_user_id,
+            product_id: final_product_id,
+            product_price_id: final_price_id,
+            transaction_type: payload.transaction_type,
+            description: payload.description.clone(),
+            date: payload.date,
+        };
+
+        let inserted_tx = diesel::insert_into(tx::transactions)
+            .values(&new_tx)
+            .get_result::<Transaction>(txn_conn)?;
+
+        Ok(inserted_tx)
+    });
+
+    match result {
+        Ok(tx) => Ok(Json(tx)),
+        Err(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
+            // Return a BAD_REQUEST with JSON error
+            Err(error_response("Duplicate transaction entry"))
+        }
+        Err(e) => {
+            // Return an INTERNAL_SERVER_ERROR with JSON error
+            Err(error_response(format!("Failed to create transaction: {e}")))
+        }
+    }
 }
 
 // GET /transactions -> returns TransactionDto with optional amount
