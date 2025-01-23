@@ -1,6 +1,6 @@
 import { buildUrl, getAuthHeaders } from "./api";
 import type {
-  CreatedTransaction,
+  CreateTransactionResponse,
   Transaction,
   TransactionPayload,
 } from "../types/transaction";
@@ -16,21 +16,13 @@ export async function fetchTransactions(token: string): Promise<Transaction[]> {
   }
   const transactions = await res.json();
   // Convert cents to dollars for frontend
-  return transactions.map((transaction: Transaction) => ({
-    ...transaction,
-    amount: transaction.amount ? transaction.amount / 100 : 0,
-  }));
+  return transactions;
 }
 
 export async function createTransaction(
   token: string,
   payload: TransactionPayload,
-): Promise<CreatedTransaction> {
-  // Convert amount to cents if present
-  if (payload.amount) {
-    payload.amount = Math.round(payload.amount * 100);
-  }
-
+): Promise<CreateTransactionResponse> {
   const res = await fetch(buildUrl("/transactions"), {
     method: "POST",
     headers: {
@@ -45,6 +37,7 @@ export async function createTransaction(
     throw new Error(`Transaction creation error: ${msg}`);
   }
 
-  const data: CreatedTransaction = await res.json();
+  // Now we receive the expanded response with transaction, product, product_price
+  const data: CreateTransactionResponse = await res.json();
   return data;
 }

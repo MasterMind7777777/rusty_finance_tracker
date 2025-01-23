@@ -20,22 +20,9 @@ use tower_http::trace::TraceLayer;
 
 use auth::{generate_jwt, require_auth};
 use models::{
-    Category,
-    CategoryPayload,
-    LoginRequest,
-    NewCategory,
-    NewProduct,
-    NewProductPrice,
-    NewTransaction,
-    NewUser,
-    Product,
-    ProductPayload,
-    ProductPrice,
-    Transaction,
-    TransactionDto, // <-- Our DTO
-    TransactionPayload,
-    TransactionType,
-    User,
+    Category, CategoryPayload, CreateTransactionResponse, LoginRequest, NewCategory, NewProduct,
+    NewProductPrice, NewTransaction, NewUser, Product, ProductPayload, ProductPrice,
+    ProductPriceDto, Transaction, TransactionPayload, User,
 };
 
 #[cfg(test)]
@@ -266,13 +253,24 @@ async fn create_product_price(
     Ok(Json(inserted))
 }
 
-async fn list_product_prices(State(state): State<Arc<AppState>>) -> Json<Vec<ProductPrice>> {
+async fn list_product_prices(State(state): State<Arc<AppState>>) -> Json<Vec<ProductPriceDto>> {
     use schema::product_prices::dsl::*;
     let mut conn = get_connection(&state.db_url);
 
     let items = product_prices
         .load::<ProductPrice>(&mut conn)
         .expect("Error loading product prices");
+
+    // price is in cents, convert to float
+    let items = items
+        .into_iter()
+        .map(|pp| ProductPriceDto {
+            id: pp.id,
+            product_id: pp.product_id,
+            price: pp.price as f64 / 100.0,
+            created_at: pp.created_at,
+        })
+        .collect();
 
     Json(items)
 }
@@ -282,24 +280,23 @@ async fn list_product_prices(State(state): State<Arc<AppState>>) -> Json<Vec<Pro
 // ===============================
 
 /// Create a transaction, referencing either `product_price_id`
-/// or creating a new price if an `amount` is given.
+/// or creating a new price if `price` is given (in cents).
 async fn create_transaction(
     State(state): State<Arc<AppState>>,
     Extension(logged_in_user_id): Extension<i32>,
     Json(payload): Json<TransactionPayload>,
-) -> JsonResult<Transaction> {
+) -> JsonResult<CreateTransactionResponse> {
     use schema::product_prices::dsl as pp;
     use schema::products::dsl as pr;
     use schema::transactions::dsl as tx;
 
     let mut conn = get_connection(&state.db_url);
 
-    let result = conn.transaction::<Transaction, DieselError, _>(|txn_conn| {
-        // 1) figure out product_id:
+    let result = conn.transaction::<CreateTransactionResponse, DieselError, _>(|txn_conn| {
+        // 1) figure out final_product_id
         let final_product_id = match payload.product_id {
             Some(existing_pid) => existing_pid,
             None => {
-                // must create new product, or fail if no product_name
                 let name = payload
                     .product_name
                     .as_ref()
@@ -309,10 +306,9 @@ async fn create_transaction(
                     return Err(DieselError::RollbackTransaction);
                 }
 
-                // Insert new product:
                 let new_prod = NewProduct {
                     user_id: logged_in_user_id,
-                    category_id: None, // or your logic
+                    category_id: None,
                     name: name.to_string(),
                 };
 
@@ -323,19 +319,13 @@ async fn create_transaction(
             }
         };
 
-        // 2) figure out product_price_id:
-        //    Prioritize product_price_id if provided:
+        // 2) figure out final_price_id
         let final_price_id = if let Some(pp_id) = payload.product_price_id {
-            // Optionally verify that pp_id belongs to final_product_id, etc.
+            // optionally verify belongs to product, but skipping here
             pp_id
         } else {
-            // Otherwise, create a new product_price if 'amount' is Some
-            let cents = payload
-                .amount
-                .ok_or_else(|| DieselError::RollbackTransaction)?;
-            if cents <= 0 {
-                return Err(DieselError::RollbackTransaction);
-            }
+            // 'price' is in float dollars in the payload
+            let cents = (payload.price.unwrap_or(0.0) * 100.0) as i32;
 
             let new_price = NewProductPrice {
                 product_id: final_product_id,
@@ -349,7 +339,7 @@ async fn create_transaction(
                 .get_result::<i32>(txn_conn)?
         };
 
-        // 3) insert transaction referencing product_price_id (not null)
+        // 3) insert transaction
         let new_tx = NewTransaction {
             user_id: logged_in_user_id,
             product_id: final_product_id,
@@ -363,110 +353,56 @@ async fn create_transaction(
             .values(&new_tx)
             .get_result::<Transaction>(txn_conn)?;
 
-        Ok(inserted_tx)
+        // 4) fetch the product
+        let fetched_product = pr::products
+            .filter(pr::id.eq(final_product_id))
+            .first::<Product>(txn_conn)?;
+
+        // 5) fetch the raw product_price (in cents)
+        let fetched_price = pp::product_prices
+            .filter(pp::id.eq(final_price_id))
+            .first::<ProductPrice>(txn_conn)?;
+
+        // Convert to our float-based DTO
+        let price_dto = ProductPriceDto {
+            id: fetched_price.id,
+            product_id: fetched_price.product_id,
+            price: fetched_price.price as f64 / 100.0,
+            created_at: fetched_price.created_at,
+        };
+
+        // Return the expanded response
+        Ok(CreateTransactionResponse {
+            transaction: inserted_tx,
+            product: fetched_product,
+            product_price: price_dto,
+        })
     });
 
     match result {
-        Ok(tx) => Ok(Json(tx)),
+        Ok(expanded_response) => Ok(Json(expanded_response)),
         Err(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
-            // Return a BAD_REQUEST with JSON error
             Err(error_response("Duplicate transaction entry"))
         }
-        Err(e) => {
-            // Return an INTERNAL_SERVER_ERROR with JSON error
-            Err(error_response(format!("Failed to create transaction: {e}")))
-        }
+        Err(e) => Err(error_response(format!("Failed to create transaction: {e}"))),
     }
 }
 
-// GET /transactions -> returns TransactionDto with optional amount
-async fn list_transactions(
+/// GET /transactions -> returns TransactionDto with optional price (as float).
+pub async fn list_transactions(
     State(state): State<Arc<AppState>>,
     Extension(logged_in_user_id): Extension<i32>,
-) -> Json<Vec<TransactionDto>> {
-    use schema::product_prices::dsl as pp;
-    use schema::products::dsl as pr;
-    use schema::transactions::dsl as tx;
-
+) -> Json<Vec<Transaction>> {
+    use schema::transactions::dsl::*;
     let mut conn = get_connection(&state.db_url);
 
-    // We'll do two left-joins:
-    // 1) left_join(products) to get the product's category_id
-    // 2) left_join(product_prices) matching (product_id, date)
-    //
-    // We'll select a tuple that includes:
-    //  - transaction fields
-    //  - product.category_id
-    //  - product_prices.price (optional)
-    //
-    // Then map that into TransactionDto.
-    type Row = (
-        i32,                   // tx::id
-        i32,                   // tx::user_id
-        i32,                   // tx::product_id
-        String,                // tx::transaction_type
-        Option<String>,        // tx::description
-        chrono::NaiveDateTime, // tx::date
-        Option<i32>,           // products.category_id
-        Option<i32>,           // product_prices.price
-    );
+    // Fetch transactions exactly as they appear in the DB
+    let user_transactions = transactions
+        .filter(user_id.eq(logged_in_user_id))
+        .load::<Transaction>(&mut conn)
+        .expect("Failed to load transactions");
 
-    // Because we need to join products and product_prices, we do:
-    //   transactions
-    //     .left_join(products.on( products.id = transactions.product_id ))
-    //     .left_join(product_prices.on( matching product_id & date ))
-
-    let rows: Vec<Row> = tx::transactions
-        .left_join(pr::products.on(pr::id.eq(tx::product_id)))
-        .left_join(
-            pp::product_prices.on(pp::product_id
-                .eq(tx::product_id)
-                .and(pp::created_at.eq(tx::date))),
-        )
-        .filter(tx::user_id.eq(logged_in_user_id))
-        .select((
-            tx::id,
-            tx::user_id,
-            tx::product_id,
-            tx::transaction_type,
-            tx::description,
-            tx::date,
-            pr::category_id.nullable(), // product's category_id
-            pp::price.nullable(),       // matched product price
-        ))
-        .load::<Row>(&mut conn)
-        .expect("Error loading transactions with product & optional price");
-
-    // Convert rows -> TransactionDto
-    let dtos = rows
-        .into_iter()
-        .map(
-            |(id, user_id, product_id, raw_type, desc, dt, prod_cat_id, maybe_price)| {
-                // Convert string -> TransactionType
-                let tx_type = match raw_type.as_str() {
-                    "income" => TransactionType::Income,
-                    "expense" => TransactionType::Expense,
-                    _ => {
-                        eprintln!("Unexpected transaction_type: {}", raw_type);
-                        TransactionType::Expense
-                    }
-                };
-                TransactionDto {
-                    id,
-                    user_id,
-                    product_id,
-                    // Our schema says category is on the product, so let's store that in category_id:
-                    category_id: prod_cat_id,
-                    transaction_type: tx_type,
-                    description: desc,
-                    date: dt,
-                    amount: maybe_price,
-                }
-            },
-        )
-        .collect();
-
-    Json(dtos)
+    Json(user_transactions)
 }
 
 // ===============================

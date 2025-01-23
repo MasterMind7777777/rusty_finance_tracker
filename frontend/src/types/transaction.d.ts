@@ -7,7 +7,7 @@ export interface TransactionPayload {
   // If user picks an existing price:
   product_price_id?: number;
   // Or typed a new price (in cents):
-  amount?: number;
+  price?: number;
 
   transaction_type: "Income" | "Expense";
   description?: string;
@@ -19,11 +19,11 @@ export interface Transaction {
   id: number;
   user_id: number;
   product_id: number; // or product_id?: number if your server might omit it
+  product_price_id: number;
   category_id?: number; // Because the backend now includes category_id if the product references a category
   transaction_type: "Income" | "Expense";
   description?: string;
   date: string; // e.g. "2025-01-18T12:00:00"
-  amount?: number; // If there's a matching product price
 }
 
 export interface CreatedTransaction {
@@ -34,4 +34,10 @@ export interface CreatedTransaction {
   transaction_type: "Income" | "Expense";
   description: string | null;
   date: string; // or Date
+}
+
+export interface CreateTransactionResponse {
+  transaction: CreatedTransaction; // or your 'Transaction' interface
+  product: Product; // your 'Product' type
+  product_price: ProductPrice; // your 'ProductPrice' type
 }

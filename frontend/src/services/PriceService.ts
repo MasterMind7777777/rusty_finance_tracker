@@ -14,31 +14,17 @@ export async function fetchProductPrices(
     return [];
   }
 
-  // The server returns product prices in cents, e.g. 1234 => $12.34
-  const rawPrices = (await res.json()) as ProductPrice[];
-
-  // Convert from integer cents to floating-dollar
-  const prices = rawPrices.map((p) => ({
-    ...p,
-    price: p.price / 100,
-  }));
-  return prices;
+  return await res.json();
 }
 
 export async function createProductPrice(
   token: string,
   payload: NewProductPrice,
 ): Promise<ProductPrice | null> {
-  // Convert from dollar float to integer cents
-  const payloadCents: NewProductPrice = {
-    ...payload,
-    price: Math.round(payload.price * 100),
-  };
-
   const res = await fetch(buildUrl("/product_prices"), {
     method: "POST",
     headers: getAuthHeaders(token),
-    body: JSON.stringify(payloadCents),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
@@ -46,10 +32,5 @@ export async function createProductPrice(
     return null;
   }
 
-  // The server responds with the newly created ProductPrice in cents
-  const created = (await res.json()) as ProductPrice;
-  // Convert it back to a floating-dollar
-  created.price = created.price / 100;
-
-  return created;
+  return await res.json();
 }

@@ -17,7 +17,7 @@ export default function ProductsPage() {
 
   async function handleRefreshProducts() {
     if (!token) {
-      console.log("No token, can't fetch products.");
+      console.error("No token, can't fetch products.");
       return;
     }
     try {

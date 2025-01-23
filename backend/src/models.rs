@@ -104,6 +104,15 @@ pub struct ProductPrice {
     pub created_at: NaiveDateTime,
 }
 
+#[derive(Serialize)]
+pub struct ProductPriceDto {
+    pub id: i32,
+    pub product_id: i32,
+    /// Price as a float with two decimals in JSON
+    pub price: f64,
+    pub created_at: chrono::NaiveDateTime,
+}
+
 #[derive(Insertable, Deserialize)]
 #[diesel(table_name = product_prices)]
 pub struct NewProductPrice {
@@ -181,12 +190,19 @@ pub struct TransactionPayload {
     pub product_id: Option<i32>, // optional if user can skip
     pub product_name: Option<String>,
     pub product_price_id: Option<i32>,
-    pub amount: Option<i32>, // optional if user wants to store price
+    pub price: Option<f64>, // optional if user wants to store price
     pub transaction_type: TransactionType,
     pub description: Option<String>,
     pub date: NaiveDateTime,
 }
 
+#[derive(Serialize)]
+pub struct CreateTransactionResponse {
+    pub transaction: Transaction,
+    pub product: Product,
+    pub product_price: ProductPriceDto,
+}
+/// DTO for listing transactions with an optional float price.
 #[derive(Serialize)]
 pub struct TransactionDto {
     pub id: i32,
@@ -196,6 +212,6 @@ pub struct TransactionDto {
     pub transaction_type: TransactionType,
     pub description: Option<String>,
     pub date: chrono::NaiveDateTime,
-    // Additional fields we fetch via left joins
-    pub amount: Option<i32>,
+    /// Price in floating dollars if available
+    pub price: Option<f64>,
 }
