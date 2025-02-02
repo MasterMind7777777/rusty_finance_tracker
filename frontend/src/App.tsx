@@ -1,19 +1,34 @@
-import { Link } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
+import { Layout } from "./Layout";
 
-export default function App() {
+// Example pages
+import LoginPage from "./pages/LoginPage";
+import SignUpPage from "./pages/SignUpPage";
+import CategoriesPage from "./pages/CategoriesPage";
+import ProductsPage from "./pages/ProductsPage";
+import ProductPricesPage from "./pages/ProductPricesPage";
+import TransactionsPage from "./pages/TransactionsPage";
+
+function App() {
   return (
-    <div
-      style={{ padding: "1rem", fontFamily: "sans-serif", maxWidth: "900px" }}
-    >
-      <h1>Finance Tracker Frontend (React + TS)</h1>
-      <nav>
-        <Link to="/">Login</Link> | <Link to="/signup">Sign Up</Link> |{" "}
-        <Link to="/categories">Categories</Link> |{" "}
-        <Link to="/products">Products</Link> |{" "}
-        <Link to="/prices">Product Prices</Link> |{" "}
-        <Link to="/transactions">Transactions</Link>
-      </nav>
-      <hr />
-    </div>
+    <Routes>
+      {/**
+        The parent route uses <Layout> as its element.
+        The <Outlet /> in Layout is where child routes render.
+      */}
+      <Route path="/" element={<Layout />}>
+        {/** index route = the default child if we go to "/" */}
+        <Route index element={<LoginPage />} />
+
+        {/** Additional children */}
+        <Route path="signup" element={<SignUpPage />} />
+        <Route path="categories" element={<CategoriesPage />} />
+        <Route path="products" element={<ProductsPage />} />
+        <Route path="prices" element={<ProductPricesPage />} />
+        <Route path="transactions" element={<TransactionsPage />} />
+      </Route>
+    </Routes>
   );
 }
+
+export default App;

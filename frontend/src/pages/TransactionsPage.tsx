@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { Box, Typography, Button } from "@mui/material";
+import {
+  Box,
+  Typography,
+  Button,
+  Snackbar,
+  Alert,
+  Stack,
+  Paper,
+} from "@mui/material";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import dayjs from "dayjs";
 
 import { useAuth } from "../contexts/AuthContext";
@@ -10,15 +19,22 @@ import { fetchProducts } from "../services/ProductService";
 import { fetchProductPrices } from "../services/PriceService";
 
 // Types
-import type { Transaction } from "../types/transaction";
-import type { Product } from "../types/product";
-import type { ProductPrice } from "../types/price";
+import { Transaction } from "../types/transaction";
+import { Product } from "../types/product";
+import { ProductPrice } from "../types/price";
 
-// Child component
+// Components
+import {
+  TransactionList,
+  MergedTransaction,
+} from "../components/Transactions/TransactionList";
 import { TransactionForm } from "../components/Transactions/TransactionForm";
 
-/** Matches your backend's expanded response for createTransaction. */
-interface CreateTransactionResponse {
+/**
+ * The exact shape returned by createTransaction.
+ * Must match what your backend actually returns.
+ */
+interface TransactionCreateResponse {
   transaction: Transaction;
   product: Product;
   product_price: ProductPrice;
@@ -27,144 +43,133 @@ interface CreateTransactionResponse {
 export default function TransactionsPage() {
   const { token } = useAuth();
 
-  // Raw, unmodified states
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [prices, setPrices] = useState<ProductPrice[]>([]);
-
-  /**
-   * We'll store an array that merges each Transaction with its matching ProductPrice.
-   */
   const [mergedTransactions, setMergedTransactions] = useState<
-    (Transaction & { displayPrice: number | "N/A" })[]
+    MergedTransaction[]
   >([]);
 
-  // Fetch data on mount (if token changes)
+  // Snackbar state for notifications
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error">(
+    "success",
+  );
+
   useEffect(() => {
     if (token) {
-      handleRefreshTransactions();
-      handleRefreshProducts();
-      handleRefreshPrices();
+      refreshData();
     }
   }, [token]);
 
-  // Whenever `transactions` or `prices` change, merge them once here
+  // Recompute mergedTransactions whenever transactions or prices change
   useEffect(() => {
-    const newMerged = transactions.map((singleTransaction) => {
-      const matchedProductPrice = prices.find(
-        (singlePrice) => singlePrice.id === singleTransaction.product_price_id,
-      );
-
-      // If matched, display that price; otherwise "N/A"
-      const displayPrice = matchedProductPrice
-        ? matchedProductPrice.price
-        : "N/A";
-
-      return {
-        ...singleTransaction,
-        displayPrice,
-      };
+    const newMerged = transactions.map((t) => {
+      const foundPrice = prices.find((p) => p.id === t.product_price_id);
+      const displayPrice = foundPrice ? foundPrice.price : "N/A";
+      return { ...t, displayPrice };
     });
-
     setMergedTransactions(newMerged);
   }, [transactions, prices]);
 
-  /**
-   * Refreshers
-   */
+  async function refreshData() {
+    await Promise.all([
+      handleRefreshTransactions(),
+      handleRefreshProducts(),
+      handleRefreshPrices(),
+    ]);
+  }
+
   async function handleRefreshTransactions() {
     if (!token) return;
     try {
-      const fetchedTransactions = await fetchTransactions(token);
-      setTransactions(fetchedTransactions);
-    } catch (error) {
-      console.error("Error fetching transactions:", error);
+      const fetched = await fetchTransactions(token);
+      setTransactions(fetched);
+    } catch (err) {
+      console.error("Error fetching transactions:", err);
+      showError("Failed to fetch transactions.");
     }
   }
 
   async function handleRefreshProducts() {
     if (!token) return;
     try {
-      const fetchedProducts = await fetchProducts(token);
-      setProducts(fetchedProducts);
-    } catch (error) {
-      console.error("Error fetching products:", error);
+      const fetched = await fetchProducts(token);
+      setProducts(fetched);
+    } catch (err) {
+      console.error("Error fetching products:", err);
+      showError("Failed to fetch products.");
     }
   }
 
   async function handleRefreshPrices() {
     if (!token) return;
     try {
-      const fetchedPrices = await fetchProductPrices(token);
+      const fetched = await fetchProductPrices(token);
 
-      // Keep only the "latest" price per product
-      const latestPricesMap = fetchedPrices.reduce(
-        (accumulator, currentProductPrice) => {
-          const existingPrice = accumulator.get(currentProductPrice.product_id);
-          if (!existingPrice) {
-            accumulator.set(
-              currentProductPrice.product_id,
-              currentProductPrice,
-            );
-          } else if (
-            dayjs(currentProductPrice.created_at).isAfter(
-              dayjs(existingPrice.created_at),
-            )
-          ) {
-            accumulator.set(
-              currentProductPrice.product_id,
-              currentProductPrice,
-            );
-          }
-          return accumulator;
-        },
-        new Map<number, ProductPrice>(),
-      );
-
-      const finalPrices = Array.from(latestPricesMap.values());
-      setPrices(finalPrices);
-    } catch (error) {
-      console.error("Error fetching prices:", error);
+      // Keep only the most recent price per product
+      const latestMap = new Map<number, ProductPrice>();
+      fetched.forEach((priceObj) => {
+        const existing = latestMap.get(priceObj.product_id);
+        if (!existing) {
+          latestMap.set(priceObj.product_id, priceObj);
+        } else if (
+          dayjs(priceObj.created_at).isAfter(dayjs(existing.created_at))
+        ) {
+          latestMap.set(priceObj.product_id, priceObj);
+        }
+      });
+      setPrices(Array.from(latestMap.values()));
+    } catch (err) {
+      console.error("Error fetching prices:", err);
+      showError("Failed to fetch prices.");
     }
   }
 
   /**
-   * Called after a successful creation (with full expanded data).
+   * Called after a successful creation in the form.
+   * Update local states and show a success message.
    */
-  function handleTransactionCreated(responseData: CreateTransactionResponse) {
-    const { transaction, product, product_price: productPrice } = responseData;
+  function handleTransactionCreated(data: TransactionCreateResponse) {
+    const { transaction, product, product_price: productPrice } = data;
 
-    // Merge or insert the product
-    setProducts((previousProducts) => {
-      const productAlreadyExists = previousProducts.some(
-        (existingProduct) => existingProduct.id === product.id,
-      );
-      if (!productAlreadyExists) {
-        return [...previousProducts, product];
-      }
-      return previousProducts.map((existingProduct) =>
-        existingProduct.id === product.id ? product : existingProduct,
-      );
+    // Merge or insert product
+    setProducts((prev) => {
+      const exists = prev.some((p) => p.id === product.id);
+      return exists
+        ? prev.map((p) => (p.id === product.id ? product : p))
+        : [...prev, product];
     });
 
-    // Merge or insert the product_price
-    setPrices((previousPrices) => {
-      const priceAlreadyExists = previousPrices.some(
-        (existingPrice) => existingPrice.id === productPrice.id,
-      );
-      if (!priceAlreadyExists) {
-        return [...previousPrices, productPrice];
-      }
-      return previousPrices.map((existingPrice) =>
-        existingPrice.id === productPrice.id ? productPrice : existingPrice,
-      );
+    // Merge or insert product price
+    setPrices((prev) => {
+      const exists = prev.some((pr) => pr.id === productPrice.id);
+      return exists
+        ? prev.map((pr) => (pr.id === productPrice.id ? productPrice : pr))
+        : [...prev, productPrice];
     });
 
     // Add the new transaction
-    setTransactions((previousTransactions) => [
-      ...previousTransactions,
-      transaction,
-    ]);
+    setTransactions((prev) => [...prev, transaction]);
+
+    showSuccess("Transaction created successfully!");
+  }
+
+  function showSuccess(msg: string) {
+    setSnackbarMessage(msg);
+    setSnackbarSeverity("success");
+    setSnackbarOpen(true);
+  }
+
+  function showError(msg: string) {
+    setSnackbarMessage(msg);
+    setSnackbarSeverity("error");
+    setSnackbarOpen(true);
+  }
+
+  function handleCloseSnackbar() {
+    setSnackbarOpen(false);
   }
 
   return (
@@ -172,35 +177,48 @@ export default function TransactionsPage() {
       <Typography variant="h5" sx={{ mb: 2 }}>
         Transactions
       </Typography>
-
-      <Button
-        variant="contained"
-        onClick={handleRefreshTransactions}
+      <Stack
+        direction="row"
+        spacing={2}
+        alignItems="center"
+        justifyContent="space-between"
         sx={{ mb: 2 }}
       >
-        Refresh Transactions
-      </Button>
-
-      {/* Render the merged transactions */}
-      {mergedTransactions.map((singleTransaction) => (
-        <Box key={singleTransaction.id} sx={{ mb: 1 }}>
-          <Typography variant="body2">
-            ID: {singleTransaction.id}, product_id:{" "}
-            {singleTransaction.product_id}, type:{" "}
-            {singleTransaction.transaction_type}, price:{" "}
-            {singleTransaction.displayPrice}, desc:{" "}
-            {singleTransaction.description}, date: {singleTransaction.date}
-          </Typography>
-        </Box>
-      ))}
-
-      {/* Our reusable form for creating transactions */}
-      <TransactionForm
-        token={token || ""}
-        products={products}
-        prices={prices}
-        onTransactionCreated={handleTransactionCreated}
-      />
+        <Typography variant="body1" sx={{ fontWeight: 600 }}>
+          Here you can view and create new transactions.
+        </Typography>
+        <Button
+          variant="outlined"
+          color="primary"
+          startIcon={<RefreshIcon />}
+          onClick={handleRefreshTransactions}
+        >
+          Refresh
+        </Button>
+      </Stack>
+      <TransactionList transactions={mergedTransactions} />
+      <Paper sx={{ p: 2 }}>
+        <TransactionForm
+          token={token || ""}
+          products={products}
+          prices={prices}
+          onTransactionCreated={handleTransactionCreated}
+        />
+      </Paper>
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={snackbarSeverity}
+          sx={{ width: "100%" }}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

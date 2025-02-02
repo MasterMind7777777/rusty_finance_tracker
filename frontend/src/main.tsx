@@ -1,18 +1,29 @@
+// src/main.tsx
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
-import AppRouter from "./router";
-import { AuthProvider } from "./contexts/AuthContext";
 import { BrowserRouter } from "react-router-dom";
-import "./index.css"; // Your global styles
+import App from "./App"; // The file above
+import { AuthProvider } from "./contexts/AuthContext";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
+import CssBaseline from "@mui/material/CssBaseline";
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+const theme = createTheme({
+  palette: {
+    primary: { main: "#1976d2" },
+    secondary: { main: "#9c27b0" },
+  },
+  // ...typography, shapes, etc. as needed
+});
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <App />
-        <AppRouter />
-      </AuthProvider>
-    </BrowserRouter>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <BrowserRouter>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </BrowserRouter>
+    </ThemeProvider>
   </React.StrictMode>,
 );

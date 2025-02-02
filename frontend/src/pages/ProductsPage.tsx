@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from "react";
-import { fetchProducts, createProduct } from "../services/ProductService";
+import { useEffect, useState } from "react";
+import { fetchProducts } from "../services/ProductService";
 import { useAuth } from "../contexts/AuthContext";
 import type { Product } from "../types/product";
-import { Box, Typography, Button, TextField } from "@mui/material";
+import { Box, Typography, Button, Stack } from "@mui/material";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import { ProductList } from "../components/Products/ProductList";
+import { ProductForm } from "../components/Products/ProductForm";
 
 export default function ProductsPage() {
   const { token } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
-  const [productName, setProductName] = useState("");
 
   useEffect(() => {
     if (token) {
@@ -28,77 +30,33 @@ export default function ProductsPage() {
     }
   }
 
-  async function handleCreateProduct(e: React.FormEvent) {
-    e.preventDefault();
-    if (!token) {
-      console.log("No token, please log in.");
-      return;
-    }
-    if (!productName.trim()) {
-      console.log("Product name is empty, please enter a name.");
-      return;
-    }
-    try {
-      // createProduct now returns the newly created Product object
-      const newProd = await createProduct(token, { name: productName });
-
-      if (!newProd) {
-        console.error("Product creation failed.");
-        return;
-      }
-
-      console.log("Product created:", newProd);
-      // Refresh or push into local state
-      setProducts([...products, newProd]);
-      // Clear input
-      setProductName("");
-    } catch (error) {
-      console.error("Error creating product:", error);
-    }
+  function handleProductCreated(newProduct: Product) {
+    // Add the newly created product to the list
+    setProducts((prev) => [...prev, newProduct]);
   }
 
   return (
     <Box sx={{ p: 2 }}>
-      <Typography variant="h5" sx={{ mb: 2 }}>
-        Products
-      </Typography>
-
-      <Button
-        variant="contained"
-        onClick={handleRefreshProducts}
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems="center"
         sx={{ mb: 2 }}
       >
-        Refresh Products
-      </Button>
-
-      {/* List existing products */}
-      {products.map((p) => (
-        <Box key={p.id} sx={{ mb: 1 }}>
-          <Typography variant="body2">
-            ID: {p.id}, Name: {p.name}, user_id: {p.user_id}
-          </Typography>
-        </Box>
-      ))}
-
-      {/* Form to create a product */}
-      <Box component="form" onSubmit={handleCreateProduct} sx={{ mt: 3 }}>
-        <Typography variant="h6" sx={{ mb: 1 }}>
-          Create a new product
-        </Typography>
-
-        <TextField
-          label="Product Name"
-          variant="outlined"
-          size="small"
-          value={productName}
-          onChange={(e) => setProductName(e.target.value)}
-          sx={{ mb: 2, width: "300px" }}
-        />
-
-        <Button variant="contained" type="submit">
-          Create Product
+        <Typography variant="h5">Products</Typography>
+        <Button
+          variant="contained"
+          onClick={handleRefreshProducts}
+          startIcon={<RefreshIcon />}
+        >
+          Refresh Products
         </Button>
-      </Box>
+      </Stack>
+      <ProductList products={products} />
+      <ProductForm
+        token={token || ""}
+        onProductCreated={handleProductCreated}
+      />
     </Box>
   );
 }

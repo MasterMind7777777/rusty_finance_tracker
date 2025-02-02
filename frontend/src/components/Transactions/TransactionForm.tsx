@@ -6,7 +6,12 @@ import {
   TextField,
   Select,
   MenuItem,
+  Alert,
+  FormControl,
+  InputLabel,
+  FormHelperText,
 } from "@mui/material";
+import Grid from "@mui/material/Grid2"; // Grid v2 import in MUI v6+
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -15,19 +20,11 @@ import dayjs, { Dayjs } from "dayjs";
 import { createTransaction } from "../../services/TransactionService";
 import { ProductPrice } from "../../types/price";
 import { Product } from "../../types/product";
-import { TransactionPayload } from "../../types/transaction";
+import { Transaction, TransactionPayload } from "../../types/transaction";
 import { AutocompleteMui } from "../Autocomplete/Autocomplete";
 
-/**
- * Match your expanded backend response, e.g.:
- * {
- *   transaction: Transaction,
- *   product: Product,
- *   product_price: ProductPrice
- * }
- */
-interface CreateTransactionResponse {
-  transaction: any; // or your 'Transaction' interface
+interface TransactionFormCreateResponse {
+  transaction: Transaction;
   product: Product;
   product_price: ProductPrice;
 }
@@ -36,8 +33,7 @@ interface TransactionFormProps {
   token: string;
   products: Product[];
   prices: ProductPrice[];
-  /** Now it accepts the FULL expanded data */
-  onTransactionCreated?: (data: CreateTransactionResponse) => void;
+  onTransactionCreated?: (data: TransactionFormCreateResponse) => void;
 }
 
 export function TransactionForm({
@@ -46,81 +42,62 @@ export function TransactionForm({
   prices,
   onTransactionCreated,
 }: TransactionFormProps) {
-  // Local form state
   const [txType, setTxType] = useState<"Income" | "Expense">("Expense");
-  const [txPrice, setTxPrice] = useState(""); // fallback typed price (float)
   const [txDescription, setTxDescription] = useState("");
   const [txDate, setTxDate] = useState<Dayjs>(dayjs());
 
-  // Product state
-  const [productInput, setProductInput] = useState(""); // typed product name
+  const [productInput, setProductInput] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
-  // Price state
-  const [priceInput, setPriceInput] = useState(""); // typed price if new
+  const [priceInput, setPriceInput] = useState("");
   const [selectedPrice, setSelectedPrice] = useState<ProductPrice | null>(null);
+  const [priceError, setPriceError] = useState("");
 
-  // Avoid double creation in Strict Mode
+  const [errorMessage, setErrorMessage] = useState("");
   const creatingRef = useRef(false);
 
-  // Handle form submission
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
 
     if (creatingRef.current) {
-      console.log("Skipping transaction creation; already creating...");
+      console.log("Already creating a transaction; skipping...");
       return;
     }
     creatingRef.current = true;
+    setErrorMessage("");
 
     try {
       // 1) Determine product_id or product_name
       let finalProductId: number | undefined;
       let finalProductName: string | undefined;
+
       if (selectedProduct) {
         finalProductId = selectedProduct.id;
       } else if (productInput.trim()) {
         finalProductName = productInput.trim();
       } else {
-        console.log("No product selected or typed. Cannot create transaction.");
-        return;
+        throw new Error("Please select or type a product name.");
       }
 
-      // 2) Determine product_price_id or price
+      // 2) Determine product_price_id or typed price
       let finalPriceId: number | undefined;
       let finalAmount: number | undefined;
 
       if (selectedPrice) {
-        // User picked an existing ProductPrice
+        // Reuse existing ProductPrice
         finalPriceId = selectedPrice.id;
       } else if (priceInput.trim()) {
-        // User typed a new price
-        const parsedFloat = parseFloat(priceInput.trim());
-        if (!isNaN(parsedFloat) && parsedFloat > 0) {
-          finalAmount = parsedFloat; // We'll send a float; backend converts to cents
-        } else {
-          console.log("Invalid typed price, cannot create transaction.");
-          return;
+        // Typed in a new numeric price
+        const parsed = parseFloat(priceInput);
+        if (isNaN(parsed) || parsed <= 0) {
+          throw new Error("Invalid typed price. Must be a positive number.");
         }
-      } else if (txPrice.trim()) {
-        // Fallback: user typed something in `txAmount`
-        const parsedFallback = parseFloat(txPrice.trim());
-        if (!isNaN(parsedFallback) && parsedFallback > 0) {
-          finalAmount = parsedFallback;
-        } else {
-          console.log("Invalid fallback price, cannot create transaction.");
-          return;
-        }
+        finalAmount = parsed;
       } else {
-        console.log(
-          "No existing/new price was provided. Cannot create transaction.",
-        );
-        return;
+        throw new Error("Please select or type a price.");
       }
 
-      // 3) Build final payload
-      const dateStr = txDate.format("YYYY-MM-DDTHH:mm:ss");
       const payload: TransactionPayload = {
         product_id: finalProductId,
         product_name: finalProductName,
@@ -128,149 +105,187 @@ export function TransactionForm({
         price: finalAmount,
         transaction_type: txType,
         description: txDescription.trim(),
-        date: dateStr,
+        date: txDate.format("YYYY-MM-DDTHH:mm:ss"),
       };
 
-      // 4) Single request to create transaction
-      //    (Assuming this returns the full expanded response)
       const responseData = await createTransaction(token, payload);
-
       if (responseData) {
-        console.log("Transaction created successfully:", responseData);
-
-        // 5) Notify parent with the entire expanded response
-        onTransactionCreated?.(responseData);
-
-        // 6) (Partially) Reset form fields as desired:
-        //    We DO NOT clear the selected product/price to avoid "No product" on second click
+        onTransactionCreated?.({
+          transaction: responseData.transaction,
+          product: responseData.product,
+          product_price: responseData.product_price,
+        });
+        // Reset fields
         setTxType("Expense");
-        setTxPrice("");
         setTxDescription("");
         setTxDate(dayjs());
-
-        // Instead of null, set them to the newly created or existing references:
         setSelectedProduct(responseData.product);
         setProductInput(responseData.product.name);
-
         setSelectedPrice(responseData.product_price);
+        setPriceInput("");
+        setPriceError("");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error creating transaction:", err);
+      setErrorMessage(err.message || "Something went wrong.");
     } finally {
       creatingRef.current = false;
     }
   }
 
+  /** Validate typed price in real time */
+  function handlePriceInputChange(newVal: string) {
+    setPriceInput(newVal);
+    if (!newVal) {
+      setPriceError("");
+      return;
+    }
+    const parsed = parseFloat(newVal);
+    if (isNaN(parsed) || parsed < 0) {
+      setPriceError("Please enter a valid positive number.");
+    } else {
+      setPriceError("");
+    }
+  }
+
   return (
-    <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
-      <Typography variant="h6" sx={{ mb: 1 }}>
-        Create a new transaction
+    <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
+      <Typography variant="h6" sx={{ mb: 2 }}>
+        Create a New Transaction
       </Typography>
 
-      {/* Transaction Type */}
-      <Typography variant="subtitle1" sx={{ mb: 1 }}>
-        Transaction Type
-      </Typography>
-      <Select
-        value={txType}
-        onChange={(e) => setTxType(e.target.value as "Income" | "Expense")}
-        sx={{ mb: 2, width: "300px" }}
-        size="small"
-      >
-        <MenuItem value="Expense">Expense</MenuItem>
-        <MenuItem value="Income">Income</MenuItem>
-      </Select>
+      {errorMessage && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {errorMessage}
+        </Alert>
+      )}
 
-      {/* Fallback manual numeric price (float) */}
-      <TextField
-        label="Fallback Amount (float)"
-        variant="outlined"
-        size="small"
-        value={txPrice}
-        onChange={(e) => setTxPrice(e.target.value)}
-        sx={{ mb: 2, width: "300px" }}
-      />
+      {/**
+       * In Grid v2 (stable in MUI v6+):
+       * - Use `container` for the parent
+       * - Each child can specify `size={12}` or `size={{ xs: 12, sm: 6 }}`, etc.
+       *   for responsive columns.
+       * - No 'item' or 'xs' prop is needed—just `size`.
+       */}
 
-      {/* Autocomplete for existing/new Price */}
-      <AutocompleteMui<ProductPrice>
-        items={prices}
-        getOptionLabel={(option) => {
-          if (typeof option === "string") {
-            return option; // typed user string
-          }
-          return String(option.price); // existing ProductPrice
-        }}
-        onSelect={(val) => {
-          if (!val) {
-            setSelectedPrice(null);
-            setPriceInput("");
-          } else if (typeof val === "string") {
-            setSelectedPrice(null);
-            setPriceInput(val);
-          } else {
-            setSelectedPrice(val);
-            setPriceInput("");
-          }
-        }}
-        onInputChange={(typedVal) => setPriceInput(typedVal)}
-        label="Select or Type a Product Price"
-        allowNewValue={true}
-      />
+      <Grid container spacing={2}>
+        {/* Row 1: Transaction Type, Price */}
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <FormControl fullWidth size="small">
+            <InputLabel id="transaction-type-label">
+              Transaction Type
+            </InputLabel>
+            <Select
+              labelId="transaction-type-label"
+              label="Transaction Type"
+              value={txType}
+              onChange={(e) =>
+                setTxType(e.target.value as "Income" | "Expense")
+              }
+            >
+              <MenuItem value="Expense">Expense</MenuItem>
+              <MenuItem value="Income">Income</MenuItem>
+            </Select>
+            <FormHelperText>
+              Select if this is an expense or income.
+            </FormHelperText>
+          </FormControl>
+        </Grid>
 
-      {/* Description */}
-      <TextField
-        label="Description"
-        variant="outlined"
-        size="small"
-        value={txDescription}
-        onChange={(e) => setTxDescription(e.target.value)}
-        sx={{ mb: 2, width: "300px" }}
-      />
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <AutocompleteMui<ProductPrice>
+            items={prices}
+            getOptionLabel={(option) =>
+              typeof option === "string" ? option : String(option.price)
+            }
+            onSelect={(val) => {
+              if (!val) {
+                setSelectedPrice(null);
+                setPriceInput("");
+                setPriceError("");
+              } else if (typeof val === "string") {
+                setSelectedPrice(null);
+                setPriceInput(val);
+              } else {
+                setSelectedPrice(val);
+                setPriceInput("");
+                setPriceError("");
+              }
+            }}
+            onInputChange={handlePriceInputChange}
+            label="Price"
+            allowNewValue
+          />
+          {priceError && <FormHelperText error>{priceError}</FormHelperText>}
+        </Grid>
 
-      {/* Date Picker */}
-      <LocalizationProvider dateAdapter={AdapterDayjs}>
-        <DatePicker
-          label="Transaction Date"
-          value={txDate}
-          onChange={(newValue) => {
-            if (newValue) setTxDate(newValue);
-          }}
-          sx={{ mb: 2, width: "300px" }}
-        />
-      </LocalizationProvider>
+        {/* Row 2: Description, Date */}
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <TextField
+            label="Description"
+            variant="outlined"
+            size="small"
+            fullWidth
+            value={txDescription}
+            onChange={(e) => setTxDescription(e.target.value)}
+            helperText="Optional: Add notes about this transaction."
+          />
+        </Grid>
 
-      {/* Product selection/autocomplete */}
-      <Typography variant="subtitle1" sx={{ mt: 1 }}>
-        Select or Type Product (required)
-      </Typography>
-      <AutocompleteMui<Product>
-        items={products}
-        getOptionLabel={(option) => {
-          if (typeof option === "string") {
-            return option;
-          }
-          return option.name;
-        }}
-        onSelect={(val) => {
-          if (!val) {
-            setSelectedProduct(null);
-            setProductInput("");
-          } else if (typeof val === "string") {
-            setSelectedProduct(null);
-            setProductInput(val);
-          } else {
-            setSelectedProduct(val);
-            setProductInput("");
-          }
-        }}
-        onInputChange={(inputVal) => setProductInput(inputVal)}
-        label="Product"
-        allowNewValue={true}
-      />
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <DatePicker
+              label="Transaction Date"
+              value={txDate}
+              onChange={(newValue) => {
+                if (newValue) setTxDate(newValue);
+              }}
+              slotProps={{
+                textField: {
+                  size: "small",
+                  fullWidth: true,
+                  helperText: "Choose the date of this transaction.",
+                },
+              }}
+            />
+          </LocalizationProvider>
+        </Grid>
 
-      <Button variant="contained" type="submit" sx={{ mt: 2 }}>
-        Create Transaction
-      </Button>
+        {/* Row 3: Product Autocomplete */}
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <AutocompleteMui<Product>
+            items={products}
+            getOptionLabel={(option) =>
+              typeof option === "string" ? option : option.name
+            }
+            onSelect={(val) => {
+              if (!val) {
+                setSelectedProduct(null);
+                setProductInput("");
+              } else if (typeof val === "string") {
+                setSelectedProduct(null);
+                setProductInput(val);
+              } else {
+                setSelectedProduct(val);
+                setProductInput("");
+              }
+            }}
+            onInputChange={(val) => setProductInput(val)}
+            label="Product"
+            allowNewValue
+          />
+        </Grid>
+      </Grid>
+
+      <Box sx={{ mt: 3 }}>
+        <Button
+          variant="contained"
+          type="submit"
+          disabled={Boolean(priceError)}
+        >
+          Create Transaction
+        </Button>
+      </Box>
     </Box>
   );
 }
