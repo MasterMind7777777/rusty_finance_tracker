@@ -8,6 +8,7 @@ import CategoriesPage from "./pages/CategoriesPage";
 import ProductsPage from "./pages/ProductsPage";
 import ProductPricesPage from "./pages/ProductPricesPage";
 import TransactionsPage from "./pages/TransactionsPage";
+import TagsPage from "./pages/TagsPage"; // Import TagsPage
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
         <Route path="products" element={<ProductsPage />} />
         <Route path="prices" element={<ProductPricesPage />} />
         <Route path="transactions" element={<TransactionsPage />} />
+        <Route path="tags" element={<TagsPage />} />
       </Route>
     </Routes>
   );

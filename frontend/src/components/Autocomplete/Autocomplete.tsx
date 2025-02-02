@@ -1,6 +1,6 @@
 import { Autocomplete, TextField, TextFieldProps } from "@mui/material";
 
-interface AutocompleteMuiProps<T> {
+export interface AutocompleteMuiProps<T> {
   items: T[];
   getOptionLabel: (option: T | string) => string;
   onSelect: (selected: T | string | null) => void;
@@ -19,7 +19,7 @@ export function AutocompleteMui<T>(
   props: AutocompleteMuiProps<T>,
 ): JSX.Element {
   const {
-    items,
+    items = [],
     getOptionLabel,
     onSelect,
     onInputChange,

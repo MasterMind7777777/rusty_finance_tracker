@@ -6,7 +6,7 @@ use diesel::{AsExpression, FromSqlRow, Insertable, Queryable};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 
-use crate::schema::{categories, product_prices, products, transactions, users};
+use crate::schema::{categories, product_prices, products, tags, transactions, users};
 use chrono::NaiveDateTime;
 
 // =====================
@@ -194,6 +194,7 @@ pub struct TransactionPayload {
     pub transaction_type: TransactionType,
     pub description: Option<String>,
     pub date: NaiveDateTime,
+    pub tags: Option<Vec<TagReference>>, // NEW: tag references (either id or name)
 }
 
 #[derive(Serialize)]
@@ -201,17 +202,58 @@ pub struct CreateTransactionResponse {
     pub transaction: Transaction,
     pub product: Product,
     pub product_price: ProductPriceDto,
+    pub tags: Vec<TagDto>, // NEW: the associated tags
 }
+
 /// DTO for listing transactions with an optional float price.
 #[derive(Serialize)]
 pub struct TransactionDto {
     pub id: i32,
     pub user_id: i32,
     pub product_id: i32,
-    pub category_id: Option<i32>,
+    pub product_price_id: i32,
     pub transaction_type: TransactionType,
     pub description: Option<String>,
-    pub date: chrono::NaiveDateTime,
-    /// Price in floating dollars if available
-    pub price: Option<f64>,
+    pub date: NaiveDateTime,
+    pub tags: Vec<i32>, // NEW: the associated tags
+}
+
+// =====================
+//     TAG
+// =====================
+
+#[derive(Selectable, Queryable, Serialize, Deserialize, Debug)]
+#[diesel(table_name = tags)]
+pub struct Tag {
+    pub id: i32,
+    pub name: String,
+    pub user_id: i32,
+}
+
+// tag dto
+#[derive(Serialize)]
+pub struct TagDto {
+    pub id: i32,
+    pub name: String,
+}
+
+#[derive(Insertable, Deserialize)]
+#[diesel(table_name = tags)]
+pub struct NewTag {
+    pub name: String,
+    pub user_id: i32,
+}
+
+// Payload for creation
+#[derive(Deserialize)]
+pub struct TagPayload {
+    pub name: String,
+}
+
+// New enum to represent a tag reference (either an ID or a name)
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum TagReference {
+    Id(i32),
+    Name(String),
 }

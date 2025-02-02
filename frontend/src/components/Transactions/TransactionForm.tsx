@@ -20,19 +20,26 @@ import dayjs, { Dayjs } from "dayjs";
 import { createTransaction } from "../../services/TransactionService";
 import { ProductPrice } from "../../types/price";
 import { Product } from "../../types/product";
-import { Transaction, TransactionPayload } from "../../types/transaction";
+import {
+  CreatedTransaction,
+  TransactionPayload,
+} from "../../types/transaction";
 import { AutocompleteMui } from "../Autocomplete/Autocomplete";
+import { Tag } from "../../types/tag";
+import { AutocompleteMuiMultiple } from "../Autocomplete/AutocompleteMulti";
 
 interface TransactionFormCreateResponse {
-  transaction: Transaction;
+  transaction: CreatedTransaction;
   product: Product;
   product_price: ProductPrice;
+  tags: Tag[] | null;
 }
 
 interface TransactionFormProps {
   token: string;
   products: Product[];
   prices: ProductPrice[];
+  tags: Tag[] | null;
   onTransactionCreated?: (data: TransactionFormCreateResponse) => void;
 }
 
@@ -40,6 +47,7 @@ export function TransactionForm({
   token,
   products,
   prices,
+  tags,
   onTransactionCreated,
 }: TransactionFormProps) {
   const [txType, setTxType] = useState<"Income" | "Expense">("Expense");
@@ -53,6 +61,8 @@ export function TransactionForm({
   const [selectedPrice, setSelectedPrice] = useState<ProductPrice | null>(null);
   const [priceError, setPriceError] = useState("");
 
+  const [tagsValue, setTagsValue] = useState<Tag[]>([]); // Store selected tags
+  const [newTagsValue, setNewTagsValue] = useState<string[]>([]); // Store newly created tags
   const [errorMessage, setErrorMessage] = useState("");
   const creatingRef = useRef(false);
 
@@ -98,6 +108,9 @@ export function TransactionForm({
         throw new Error("Please select or type a price.");
       }
 
+      // combine tagsValue and newTagsValue into id ints new string
+      const tagsValueIds = [...tagsValue.map((tag) => tag.id), ...newTagsValue];
+
       const payload: TransactionPayload = {
         product_id: finalProductId,
         product_name: finalProductName,
@@ -106,6 +119,7 @@ export function TransactionForm({
         transaction_type: txType,
         description: txDescription.trim(),
         date: txDate.format("YYYY-MM-DDTHH:mm:ss"),
+        tags: tagsValueIds,
       };
 
       const responseData = await createTransaction(token, payload);
@@ -114,6 +128,7 @@ export function TransactionForm({
           transaction: responseData.transaction,
           product: responseData.product,
           product_price: responseData.product_price,
+          tags: responseData.tags,
         });
         // Reset fields
         setTxType("Expense");
@@ -124,6 +139,7 @@ export function TransactionForm({
         setSelectedPrice(responseData.product_price);
         setPriceInput("");
         setPriceError("");
+        setTagsValue([]); // Reset selected tags
       }
     } catch (err: any) {
       console.error("Error creating transaction:", err);
@@ -159,14 +175,6 @@ export function TransactionForm({
           {errorMessage}
         </Alert>
       )}
-
-      {/**
-       * In Grid v2 (stable in MUI v6+):
-       * - Use `container` for the parent
-       * - Each child can specify `size={12}` or `size={{ xs: 12, sm: 6 }}`, etc.
-       *   for responsive columns.
-       * - No 'item' or 'xs' prop is needed—just `size`.
-       */}
 
       <Grid container spacing={2}>
         {/* Row 1: Transaction Type, Price */}
@@ -272,6 +280,20 @@ export function TransactionForm({
             }}
             onInputChange={(val) => setProductInput(val)}
             label="Product"
+            allowNewValue
+          />
+        </Grid>
+
+        {/* Row 4: Tags */}
+        <Grid size={{ xs: 12 }}>
+          <AutocompleteMuiMultiple<Tag>
+            value={tagsValue}
+            onChange={setTagsValue}
+            items={tags || []}
+            newValues={newTagsValue}
+            onNewValuesChange={setNewTagsValue}
+            getOptionLabel={(tag) => (typeof tag === "string" ? tag : tag.name)}
+            label="Select Tags"
             allowNewValue
           />
         </Grid>

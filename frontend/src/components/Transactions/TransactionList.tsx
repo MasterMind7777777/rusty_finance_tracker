@@ -30,6 +30,7 @@ export function TransactionList({ transactions }: TransactionListProps) {
             <TableCell>Price</TableCell>
             <TableCell>Description</TableCell>
             <TableCell>Date</TableCell>
+            <TableCell>Tags</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -45,6 +46,7 @@ export function TransactionList({ transactions }: TransactionListProps) {
               </TableCell>
               <TableCell>{tx.description || ""}</TableCell>
               <TableCell>{tx.date}</TableCell>
+              <TableCell>{tx.tags}</TableCell>
             </TableRow>
           ))}
           {transactions.length === 0 && (

@@ -17,6 +17,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { fetchTransactions } from "../services/TransactionService";
 import { fetchProducts } from "../services/ProductService";
 import { fetchProductPrices } from "../services/PriceService";
+import { fetchTags } from "../services/TagService";
 
 // Types
 import { Transaction } from "../types/transaction";
@@ -29,6 +30,7 @@ import {
   MergedTransaction,
 } from "../components/Transactions/TransactionList";
 import { TransactionForm } from "../components/Transactions/TransactionForm";
+import { Tag } from "../types/tag";
 
 /**
  * The exact shape returned by createTransaction.
@@ -38,6 +40,7 @@ interface TransactionCreateResponse {
   transaction: Transaction;
   product: Product;
   product_price: ProductPrice;
+  tags?: Tag[] | null;
 }
 
 export default function TransactionsPage() {
@@ -46,6 +49,7 @@ export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [prices, setPrices] = useState<ProductPrice[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [mergedTransactions, setMergedTransactions] = useState<
     MergedTransaction[]
   >([]);
@@ -78,6 +82,7 @@ export default function TransactionsPage() {
       handleRefreshTransactions(),
       handleRefreshProducts(),
       handleRefreshPrices(),
+      handleRefreshTags(),
     ]);
   }
 
@@ -127,12 +132,28 @@ export default function TransactionsPage() {
     }
   }
 
+  async function handleRefreshTags() {
+    if (!token) return;
+    try {
+      const fetchedTags = await fetchTags(token); // Implement fetchTags function if necessary
+      setTags(fetchedTags);
+    } catch (err) {
+      console.error("Error fetching tags:", err);
+      showError("Failed to fetch tags.");
+    }
+  }
+
   /**
    * Called after a successful creation in the form.
    * Update local states and show a success message.
    */
   function handleTransactionCreated(data: TransactionCreateResponse) {
-    const { transaction, product, product_price: productPrice } = data;
+    const {
+      transaction,
+      product,
+      product_price: productPrice,
+      tags: newTags,
+    } = data;
 
     // Merge or insert product
     setProducts((prev) => {
@@ -149,6 +170,19 @@ export default function TransactionsPage() {
         ? prev.map((pr) => (pr.id === productPrice.id ? productPrice : pr))
         : [...prev, productPrice];
     });
+
+    if (newTags) {
+      // Merge or insert tags
+      setTags((prevTags) => {
+        const updatedTags = [...prevTags];
+        newTags.forEach((tag) => {
+          if (!updatedTags.some((existingTag) => existingTag.id === tag.id)) {
+            updatedTags.push(tag);
+          }
+        });
+        return updatedTags;
+      });
+    }
 
     // Add the new transaction
     setTransactions((prev) => [...prev, transaction]);
@@ -202,6 +236,7 @@ export default function TransactionsPage() {
           token={token || ""}
           products={products}
           prices={prices}
+          tags={tags}
           onTransactionCreated={handleTransactionCreated}
         />
       </Paper>

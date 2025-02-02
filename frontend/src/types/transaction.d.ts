@@ -12,6 +12,7 @@ export interface TransactionPayload {
   transaction_type: "Income" | "Expense";
   description?: string;
   date: string; // e.g. "2025-01-22T12:59:36"
+  tags?: (number | string)[]; // Can be an array of tag IDs or tag names
 }
 
 // The actual Transaction structure from the DB (no category_id)
@@ -22,8 +23,9 @@ export interface Transaction {
   product_price_id: number;
   category_id?: number; // Because the backend now includes category_id if the product references a category
   transaction_type: "Income" | "Expense";
-  description?: string;
+  description?: string | null;
   date: string; // e.g. "2025-01-18T12:00:00"
+  tags: number[] | null; // store tag IDs
 }
 
 export interface CreatedTransaction {
@@ -32,12 +34,14 @@ export interface CreatedTransaction {
   product_id: number;
   product_price_id: number; // not null
   transaction_type: "Income" | "Expense";
-  description: string | null;
+  description?: string | null;
   date: string; // or Date
+  tags: number[] | null; // store tag IDs
 }
 
 export interface CreateTransactionResponse {
   transaction: CreatedTransaction; // or your 'Transaction' interface
   product: Product; // your 'Product' type
   product_price: ProductPrice; // your 'ProductPrice' type
+  tags: Tag[] | null; // your 'Tag' type
 }

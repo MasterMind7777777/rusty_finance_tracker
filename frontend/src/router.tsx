@@ -1,3 +1,4 @@
+// src/AppRouter.tsx
 import { Routes, Route } from "react-router-dom";
 import SignUpPage from "./pages/SignUpPage";
 import LoginPage from "./pages/LoginPage";
@@ -5,6 +6,7 @@ import CategoriesPage from "./pages/CategoriesPage";
 import ProductsPage from "./pages/ProductsPage";
 import ProductPricesPage from "./pages/ProductPricesPage";
 import TransactionsPage from "./pages/TransactionsPage";
+import TagsPage from "./pages/TagsPage"; // Import the Tags page
 
 export default function AppRouter() {
   return (
@@ -15,6 +17,7 @@ export default function AppRouter() {
       <Route path="/products" element={<ProductsPage />} />
       <Route path="/prices" element={<ProductPricesPage />} />
       <Route path="/transactions" element={<TransactionsPage />} />
+      <Route path="/tags" element={<TagsPage />} /> {/* New tag route */}
     </Routes>
   );
 }

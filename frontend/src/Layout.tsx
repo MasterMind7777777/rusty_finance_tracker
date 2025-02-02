@@ -1,3 +1,4 @@
+// src/components/Layout.tsx
 import React from "react";
 import { Outlet, Link as RouterLink } from "react-router-dom";
 import {
@@ -32,7 +33,7 @@ export function Layout({ drawerWidth = 240 }: LayoutProps) {
     setMobileOpen(!mobileOpen);
   };
 
-  // You can generate or hardcode these links
+  // Updated navigation links to include Tags
   const navLinks = [
     { text: "Login", path: "/" },
     { text: "Sign Up", path: "/signup" },
@@ -40,6 +41,7 @@ export function Layout({ drawerWidth = 240 }: LayoutProps) {
     { text: "Products", path: "/products" },
     { text: "Prices", path: "/prices" },
     { text: "Transactions", path: "/transactions" },
+    { text: "Tags", path: "/tags" },
   ];
 
   const drawer = (
@@ -56,7 +58,7 @@ export function Layout({ drawerWidth = 240 }: LayoutProps) {
             component={RouterLink}
             to={item.path}
             key={item.text}
-            onClick={() => setMobileOpen(false)} // close drawer on click (mobile)
+            onClick={() => setMobileOpen(false)} // close drawer on mobile click
           >
             <ListItemText primary={item.text} />
           </ListItemButton>
@@ -68,7 +70,6 @@ export function Layout({ drawerWidth = 240 }: LayoutProps) {
   return (
     <Box sx={{ display: "flex" }}>
       <CssBaseline />
-
       {/** AppBar */}
       <AppBar
         position="fixed"
@@ -78,7 +79,6 @@ export function Layout({ drawerWidth = 240 }: LayoutProps) {
         }}
       >
         <Toolbar>
-          {/** Icon button for mobile to open/close drawer */}
           <IconButton
             color="inherit"
             aria-label="open drawer"
@@ -88,7 +88,6 @@ export function Layout({ drawerWidth = 240 }: LayoutProps) {
           >
             <MenuIcon />
           </IconButton>
-
           <Typography variant="h6" noWrap component="div">
             Finance Tracker
           </Typography>
@@ -101,13 +100,11 @@ export function Layout({ drawerWidth = 240 }: LayoutProps) {
         sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
         aria-label="navigation links"
       >
-        {/** The implementation can vary, here is a permanent drawer on sm+ screens,
-             and a temporary drawer on mobile. */}
         <Drawer
           variant="temporary"
           open={mobileOpen}
           onClose={handleDrawerToggle}
-          ModalProps={{ keepMounted: true }} // better performance on mobile
+          ModalProps={{ keepMounted: true }}
           sx={{
             display: { xs: "block", sm: "none" },
             "& .MuiDrawer-paper": {
@@ -140,10 +137,9 @@ export function Layout({ drawerWidth = 240 }: LayoutProps) {
           flexGrow: 1,
           p: 2,
           width: { sm: `calc(100% - ${drawerWidth}px)` },
-          mt: 8, // space under the AppBar
+          mt: 8,
         }}
       >
-        {/** This is where the selected page (route) renders */}
         <Outlet />
       </Box>
     </Box>

@@ -21,8 +21,9 @@ use tower_http::trace::TraceLayer;
 use auth::{generate_jwt, require_auth};
 use models::{
     Category, CategoryPayload, CreateTransactionResponse, LoginRequest, NewCategory, NewProduct,
-    NewProductPrice, NewTransaction, NewUser, Product, ProductPayload, ProductPrice,
-    ProductPriceDto, Transaction, TransactionPayload, User,
+    NewProductPrice, NewTag, NewTransaction, NewUser, Product, ProductPayload, ProductPrice,
+    ProductPriceDto, Tag, TagDto, TagPayload, TagReference, Transaction, TransactionDto,
+    TransactionPayload, User,
 };
 
 #[cfg(test)]
@@ -288,6 +289,8 @@ async fn create_transaction(
 ) -> JsonResult<CreateTransactionResponse> {
     use schema::product_prices::dsl as pp;
     use schema::products::dsl as pr;
+    use schema::tags::dsl as tags_dsl;
+    use schema::transaction_tags::dsl as tt_dsl;
     use schema::transactions::dsl as tx;
 
     let mut conn = get_connection(&state.db_url);
@@ -371,11 +374,78 @@ async fn create_transaction(
             created_at: fetched_price.created_at,
         };
 
-        // Return the expanded response
+        // 6) Handle the tags (both ids and names)
+        let final_tag_ids = if let Some(tag_refs) = &payload.tags {
+            let mut ids = Vec::new();
+            for tag_ref in tag_refs {
+                match tag_ref {
+                    TagReference::Id(id) => {
+                        // Add ID directly if it's already known
+                        ids.push(*id);
+                    }
+                    TagReference::Name(name) => {
+                        // Look up or create the tag by name
+                        let existing_tag: Option<Tag> = tags_dsl::tags
+                            .filter(tags_dsl::name.eq(name))
+                            .filter(tags_dsl::user_id.eq(logged_in_user_id))
+                            .first::<Tag>(txn_conn)
+                            .optional()?;
+
+                        let tag_id = if let Some(tag) = existing_tag {
+                            tag.id
+                        } else {
+                            let new_tag = NewTag {
+                                name: name.clone(),
+                                user_id: logged_in_user_id,
+                            };
+                            diesel::insert_into(tags_dsl::tags)
+                                .values(&new_tag)
+                                .returning(tags_dsl::id)
+                                .get_result::<i32>(txn_conn)?
+                        };
+                        ids.push(tag_id);
+                    }
+                }
+            }
+            Some(ids)
+        } else {
+            None
+        };
+
+        // Insert the tags into the transaction_tags table
+        if let Some(tag_ids) = final_tag_ids {
+            for tag_id in tag_ids {
+                diesel::insert_into(tt_dsl::transaction_tags)
+                    .values((
+                        tt_dsl::transaction_id.eq(inserted_tx.id),
+                        tt_dsl::tag_id.eq(tag_id),
+                    ))
+                    .execute(txn_conn)?;
+            }
+        }
+
+        // 7) Fetch the associated tags for the inserted transaction
+        let associated_tags = tt_dsl::transaction_tags
+            .inner_join(tags_dsl::tags.on(tt_dsl::tag_id.eq(tags_dsl::id)))
+            .filter(tt_dsl::transaction_id.eq(inserted_tx.id))
+            .select(tags_dsl::tags::all_columns())
+            .load::<Tag>(txn_conn)?;
+
+        // convert tags to DTO
+        let response_tags = associated_tags
+            .into_iter()
+            .map(|tag| TagDto {
+                id: tag.id,
+                name: tag.name,
+            })
+            .collect();
+
+        // Return the expanded response including tags
         Ok(CreateTransactionResponse {
             transaction: inserted_tx,
             product: fetched_product,
             product_price: price_dto,
+            tags: response_tags,
         })
     });
 
@@ -392,7 +462,7 @@ async fn create_transaction(
 pub async fn list_transactions(
     State(state): State<Arc<AppState>>,
     Extension(logged_in_user_id): Extension<i32>,
-) -> Json<Vec<Transaction>> {
+) -> Json<Vec<TransactionDto>> {
     use schema::transactions::dsl::*;
     let mut conn = get_connection(&state.db_url);
 
@@ -402,7 +472,98 @@ pub async fn list_transactions(
         .load::<Transaction>(&mut conn)
         .expect("Failed to load transactions");
 
-    Json(user_transactions)
+    // Fetch associated tags for each transactions
+    let tag_map = {
+        use schema::tags::dsl::*;
+        use schema::transaction_tags::dsl::*;
+
+        let tag_ids = user_transactions
+            .iter()
+            .map(|tx| tx.id)
+            .collect::<Vec<i32>>();
+
+        transaction_tags
+            .inner_join(tags)
+            .filter(transaction_id.eq_any(tag_ids))
+            .select((transaction_id, tags::all_columns()))
+            .load::<(i32, Tag)>(&mut conn)
+            .expect("Failed to load tags")
+    };
+
+    // convert transactions to DTO
+    let user_transactions_dto = user_transactions
+        .into_iter()
+        .map(|tx| {
+            let tags = tag_map
+                .iter()
+                .filter_map(
+                    |(tx_id, tag)| {
+                        if *tx_id == tx.id {
+                            Some(tag.id)
+                        } else {
+                            None
+                        }
+                    },
+                )
+                .collect();
+
+            TransactionDto {
+                id: tx.id,
+                user_id: tx.user_id,
+                product_id: tx.product_id,
+                product_price_id: tx.product_price_id,
+                transaction_type: tx.transaction_type,
+                description: tx.description.clone(),
+                date: tx.date,
+                tags,
+            }
+        })
+        .collect();
+
+    Json(user_transactions_dto)
+}
+
+// ===============================
+//       TAG ENDPOINTS
+// ===============================
+
+// POST /tags
+async fn create_tag(
+    State(state): State<Arc<AppState>>,
+    Extension(logged_in_user_id): Extension<i32>,
+    Json(payload): Json<TagPayload>,
+) -> JsonResult<Tag> {
+    use schema::tags::dsl::*;
+    let mut conn = get_connection(&state.db_url);
+
+    // Construct a NewTag using the logged-in user's ID.
+    let new_tag = NewTag {
+        name: payload.name,
+        user_id: logged_in_user_id,
+    };
+
+    let inserted = diesel::insert_into(tags)
+        .values(&new_tag)
+        .get_result::<Tag>(&mut conn)
+        .map_err(|e| error_response(format!("Failed to create tag: {}", e)))?;
+
+    Ok(Json(inserted))
+}
+
+// GET /tags
+async fn list_tags(
+    State(state): State<Arc<AppState>>,
+    Extension(logged_in_user_id): Extension<i32>,
+) -> Json<Vec<Tag>> {
+    use schema::tags::dsl::*;
+    let mut conn = get_connection(&state.db_url);
+
+    let items = tags
+        .filter(user_id.eq(logged_in_user_id))
+        .load::<Tag>(&mut conn)
+        .expect("Error loading tags");
+
+    Json(items)
 }
 
 // ===============================
@@ -421,6 +582,7 @@ pub fn main_router(shared_state: Arc<AppState>) -> Router {
             "/transactions",
             post(create_transaction).get(list_transactions),
         )
+        .route("/tags", post(create_tag).get(list_tags))
         .layer(axum::middleware::from_fn(require_auth));
 
     let cors = CorsLayer::new()
