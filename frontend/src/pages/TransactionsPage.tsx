@@ -72,10 +72,19 @@ export default function TransactionsPage() {
     const newMerged = transactions.map((t) => {
       const foundPrice = prices.find((p) => p.id === t.product_price_id);
       const displayPrice = foundPrice ? foundPrice.price : "N/A";
-      return { ...t, displayPrice };
+      // Map tag IDs to full tag objects using the fetched tags list.
+      const tagsObj = t.tags
+        ? t.tags
+            .map((tagId) => tags.find((tag) => tag.id === tagId))
+            .filter((tag): tag is Tag => tag !== undefined)
+        : null;
+      // Look up the full product object for this transaction.
+      const productObj =
+        products.find((product) => product.id === t.product_id) || null;
+      return { ...t, displayPrice, tagsObj, productObj };
     });
     setMergedTransactions(newMerged);
-  }, [transactions, prices]);
+  }, [transactions, prices, tags, products]);
 
   async function refreshData() {
     await Promise.all([
@@ -172,7 +181,7 @@ export default function TransactionsPage() {
     });
 
     if (newTags) {
-      // Merge or insert tags
+      // Merge or insert tags in the global tags state
       setTags((prevTags) => {
         const updatedTags = [...prevTags];
         newTags.forEach((tag) => {
@@ -184,8 +193,14 @@ export default function TransactionsPage() {
       });
     }
 
+    // Update the transaction to include tag IDs derived from newTags.
+    const updatedTransaction = {
+      ...transaction,
+      tags: newTags ? newTags.map((tag) => tag.id) : transaction.tags,
+    };
+
     // Add the new transaction
-    setTransactions((prev) => [...prev, transaction]);
+    setTransactions((prev) => [...prev, updatedTransaction]);
 
     showSuccess("Transaction created successfully!");
   }

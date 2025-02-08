@@ -9,6 +9,7 @@ import ProductsPage from "./pages/ProductsPage";
 import ProductPricesPage from "./pages/ProductPricesPage";
 import TransactionsPage from "./pages/TransactionsPage";
 import TagsPage from "./pages/TagsPage"; // Import TagsPage
+import { DashboardPage } from "./pages/DashboardPage";
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
         <Route path="prices" element={<ProductPricesPage />} />
         <Route path="transactions" element={<TransactionsPage />} />
         <Route path="tags" element={<TagsPage />} />
+        <Route path="dashboard" element={<DashboardPage />} />
       </Route>
     </Routes>
   );

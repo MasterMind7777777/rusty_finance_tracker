@@ -1,4 +1,3 @@
-// src/components/Layout.tsx
 import React from "react";
 import { Outlet, Link as RouterLink } from "react-router-dom";
 import {
@@ -42,6 +41,7 @@ export function Layout({ drawerWidth = 240 }: LayoutProps) {
     { text: "Prices", path: "/prices" },
     { text: "Transactions", path: "/transactions" },
     { text: "Tags", path: "/tags" },
+    { text: "Dashboard", path: "/dashboard" },
   ];
 
   const drawer = (
