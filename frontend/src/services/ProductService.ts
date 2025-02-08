@@ -1,5 +1,9 @@
 import { buildUrl, getAuthHeaders } from "./api";
-import type { Product, ProductPayload } from "../types/product";
+import type {
+  CreateProductResponse,
+  Product,
+  ProductPayload,
+} from "../types/product";
 
 /**
  * Fetch all products
@@ -17,12 +21,13 @@ export async function fetchProducts(token: string): Promise<Product[]> {
 }
 
 /**
- * Create a new product and return the newly created Product object
+ * Create a new product and return the full creation response, including
+ * the product and its associated category (if any).
  */
 export async function createProduct(
   token: string,
   payload: ProductPayload,
-): Promise<Product | null> {
+): Promise<CreateProductResponse | null> {
   const res = await fetch(buildUrl("/products"), {
     method: "POST",
     headers: getAuthHeaders(token),
@@ -33,7 +38,7 @@ export async function createProduct(
     return null;
   }
 
-  // Expect a JSON response containing the newly created product
+  // The response now includes both the product and (if available) its category.
   const data = await res.json();
-  return data as Product;
+  return data as CreateProductResponse;
 }

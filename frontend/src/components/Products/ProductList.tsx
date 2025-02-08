@@ -9,12 +9,14 @@ import {
   Typography,
 } from "@mui/material";
 import type { Product } from "../../types/product";
+import type { Category } from "../../types/category";
 
 interface ProductListProps {
   products: Product[];
+  categories: Category[];
 }
 
-export function ProductList({ products }: ProductListProps) {
+export function ProductList({ products, categories }: ProductListProps) {
   return (
     <TableContainer component={Paper} sx={{ mb: 3 }}>
       <Table size="small">
@@ -22,20 +24,23 @@ export function ProductList({ products }: ProductListProps) {
           <TableRow>
             <TableCell>ID</TableCell>
             <TableCell>Name</TableCell>
-            <TableCell>User ID</TableCell>
+            <TableCell>Category</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {products.map((p) => (
-            <TableRow key={p.id}>
-              <TableCell>{p.id}</TableCell>
-              <TableCell>{p.name}</TableCell>
-              <TableCell>{p.user_id}</TableCell>
-            </TableRow>
-          ))}
+          {products.map((p) => {
+            const cat = categories.find((c) => c.id === p.category_id);
+            return (
+              <TableRow key={p.id}>
+                <TableCell>{p.id}</TableCell>
+                <TableCell>{p.name}</TableCell>
+                <TableCell>{cat ? cat.name : "-"}</TableCell>
+              </TableRow>
+            );
+          })}
           {products.length === 0 && (
             <TableRow>
-              <TableCell colSpan={3} align="center">
+              <TableCell colSpan={4} align="center">
                 <Typography variant="body2">No products found.</Typography>
               </TableCell>
             </TableRow>
