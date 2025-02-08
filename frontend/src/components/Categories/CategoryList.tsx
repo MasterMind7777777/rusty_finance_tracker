@@ -22,17 +22,23 @@ export function CategoryList({ categories }: CategoryListProps) {
           <TableRow>
             <TableCell>ID</TableCell>
             <TableCell>Name</TableCell>
-            <TableCell>Parent Category ID</TableCell>
+            <TableCell>Parent Category</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {categories.map((cat) => (
-            <TableRow key={cat.id}>
-              <TableCell>{cat.id}</TableCell>
-              <TableCell>{cat.name}</TableCell>
-              <TableCell>{cat.parent_category_id ?? "None"}</TableCell>
-            </TableRow>
-          ))}
+          {categories.map((cat) => {
+            // Find the parent category (if any) from the full categories list.
+            const parent = cat.parent_category_id
+              ? categories.find((c) => c.id === cat.parent_category_id)
+              : null;
+            return (
+              <TableRow key={cat.id}>
+                <TableCell>{cat.id}</TableCell>
+                <TableCell>{cat.name}</TableCell>
+                <TableCell>{parent ? parent.name : "None"}</TableCell>
+              </TableRow>
+            );
+          })}
           {categories.length === 0 && (
             <TableRow>
               <TableCell colSpan={3} align="center">

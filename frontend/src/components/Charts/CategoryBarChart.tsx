@@ -8,20 +8,34 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from "recharts";
-import { generateCategorySpending } from "../../data/fakeData";
+import { useState, useEffect } from "react";
+import { fetchCategorySpending } from "../../services/AnaliticsService";
+import { CategorySpending } from "../../types/analytics";
+import { useAuth } from "../../contexts/AuthContext";
 
 export function CategoryBarChart(): JSX.Element {
-  const fakeCategoryData = generateCategorySpending();
+  const { token } = useAuth();
+  const [data, setData] = useState<CategorySpending[]>([]);
+
+  useEffect(() => {
+    if (!token) {
+      console.error("No token, can't fetch category spending.");
+      return;
+    }
+    fetchCategorySpending(token)
+      .then((fetchedData) => setData(fetchedData))
+      .catch((err) => console.error("Error fetching category spending:", err));
+  }, []);
 
   return (
     <Box sx={{ width: "100%", height: 400 }}>
       <ResponsiveContainer width="100%" height="90%">
-        <BarChart data={fakeCategoryData}>
+        <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="categoryName" />
+          <XAxis dataKey="category_name" />
           <YAxis />
           <Tooltip />
-          <Bar dataKey="totalSpending" fill="#82ca9d" />
+          <Bar dataKey="total_spending" fill="#82ca9d" />
         </BarChart>
       </ResponsiveContainer>
     </Box>

@@ -18,10 +18,11 @@ pub struct NewCategory {
     pub name: String,
 }
 
-/// Payload for creation
+/// Updated payload for creation: allows the parent to be specified either by ID or by name.
 #[derive(Deserialize)]
 pub struct CategoryPayload {
     pub parent_category_id: Option<i32>,
+    pub parent_category_name: Option<String>,
     pub name: String,
 }
 
@@ -29,4 +30,11 @@ pub struct CategoryPayload {
 pub struct CategoryDto {
     pub id: i32,
     pub name: String,
+}
+
+/// The response after creating a category.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateCategoryResponse {
+    pub category: Category,
+    pub parent: Option<CategoryDto>,
 }

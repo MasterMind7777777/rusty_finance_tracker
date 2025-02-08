@@ -1,15 +1,18 @@
-// src/components/Categories/CategoryForm.tsx
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { Box, Typography, Button, TextField, Paper } from "@mui/material";
 import Grid from "@mui/material/Grid2"; // Grid v2 import in MUI v6+
 import { AutocompleteMui } from "../Autocomplete/Autocomplete";
 import { createCategory } from "../../services/CategoryService";
-import type { Category, CategoryPayload } from "../../types/category";
+import type {
+  CreateCategoryResponse,
+  Category,
+  CategoryPayload,
+} from "../../types/category";
 
 interface CategoryFormProps {
   token: string;
   categories: Category[];
-  onCategoryCreated: (newCategory: Category) => void;
+  onCategoryCreated: (response: CreateCategoryResponse) => void;
 }
 
 export function CategoryForm({
@@ -18,47 +21,10 @@ export function CategoryForm({
   onCategoryCreated,
 }: CategoryFormProps) {
   const [categoryName, setCategoryName] = useState("");
-  const [parentCategory, setParentCategory] = useState<Category | null>(null);
-  const [parentCategoryInput, setParentCategoryInput] = useState<string>("");
-
-  // Prevent duplicate creation calls in StrictMode
-  const creatingRef = useRef(false);
-
-  async function ensureParentCategory(): Promise<Category | null> {
-    if (!token) return null;
-    // If already selected, reuse the parent category
-    if (parentCategory) return parentCategory;
-    // If the user typed a parent name but did not select an existing one, create it
-    if (parentCategoryInput.trim()) {
-      if (creatingRef.current) {
-        console.log("Skipping duplicate parent creation call...");
-        return null;
-      }
-      creatingRef.current = true;
-
-      const payload: CategoryPayload = {
-        name: parentCategoryInput.trim(),
-        parent_category_id: null,
-      };
-
-      try {
-        const createdParent = await createCategory(token, payload);
-        if (!createdParent) {
-          console.error("Failed to create parent category");
-          creatingRef.current = false;
-          return null;
-        }
-        setParentCategory(createdParent);
-        return createdParent;
-      } catch (err) {
-        console.error("Error creating parent category from input:", err);
-        return null;
-      } finally {
-        creatingRef.current = false;
-      }
-    }
-    return null;
-  }
+  // This state holds either an existing parent Category object or a free-typed string.
+  const [selectedParent, setSelectedParent] = useState<
+    Category | string | null
+  >(null);
 
   async function handleCreateCategory(e: React.FormEvent) {
     e.preventDefault();
@@ -67,44 +33,26 @@ export function CategoryForm({
       console.error("Cannot create a category with an empty name");
       return;
     }
+    // Build the payload with either parent_category_id or parent_category_name.
+    const payload: CategoryPayload = { name: categoryName.trim() };
+    if (selectedParent) {
+      if (typeof selectedParent === "string") {
+        payload.parent_category_name = selectedParent.trim();
+      } else {
+        payload.parent_category_id = selectedParent.id;
+      }
+    }
     try {
-      // Ensure a parent category exists if the user typed one
-      const parent = await ensureParentCategory();
-
-      const payload: CategoryPayload = {
-        name: categoryName.trim(),
-        parent_category_id: parent?.id || parentCategory?.id || null,
-      };
-
-      const newCat = await createCategory(token, payload);
-      if (!newCat) {
+      const response = await createCategory(token, payload);
+      if (!response) {
         console.error("Failed to create category");
         return;
       }
-      onCategoryCreated(newCat);
-      // Reset fields
+      onCategoryCreated(response);
       setCategoryName("");
-      setParentCategory(null);
-      setParentCategoryInput("");
+      setSelectedParent(null);
     } catch (err) {
       console.error("Error creating category:", err);
-    }
-  }
-
-  async function handleSelectParent(selected: Category | string | null) {
-    if (!token) return;
-    if (!selected) {
-      setParentCategory(null);
-      setParentCategoryInput("");
-      return;
-    }
-    if (typeof selected === "string") {
-      // User typed a new parent category name
-      setParentCategoryInput(selected);
-    } else {
-      // User selected an existing parent category
-      setParentCategory(selected);
-      setParentCategoryInput("");
     }
   }
 
@@ -128,15 +76,13 @@ export function CategoryForm({
           <Grid size={{ xs: 12 }}>
             <AutocompleteMui<Category>
               items={categories}
-              getOptionLabel={(cat) =>
-                typeof cat === "object" && "name" in cat
-                  ? cat.name
-                  : String(cat)
+              getOptionLabel={(option) =>
+                typeof option === "string" ? option : option.name
               }
-              onSelect={handleSelectParent}
-              onInputChange={(value: string) => setParentCategoryInput(value)}
+              onSelect={(val) => setSelectedParent(val)}
+              onInputChange={(val) => setSelectedParent(val)}
               label="Parent Category (optional)"
-              allowNewValue={true}
+              allowNewValue
             />
           </Grid>
           <Grid size={{ xs: 12 }}>

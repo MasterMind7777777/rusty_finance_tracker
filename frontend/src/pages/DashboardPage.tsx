@@ -90,7 +90,7 @@ export function DashboardPage(): JSX.Element {
             <Typography variant="h6" gutterBottom>
               Product Price History
             </Typography>
-            <ProductPriceLineChart />
+            <ProductPriceLineChart productId={1} />
           </Paper>
         </Grid>
       </Grid>

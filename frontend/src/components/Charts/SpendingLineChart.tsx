@@ -4,26 +4,42 @@ import {
   Line,
   XAxis,
   YAxis,
-  Tooltip,
   CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { generateSpendingTimeSeries } from "../../data/fakeData";
+import { useState, useEffect } from "react";
+import { fetchSpendingTimeSeries } from "../../services/AnaliticsService";
+import { SpendingTimeSeriesEntry } from "../../types/analytics";
+import { useAuth } from "../../contexts/AuthContext";
 
 export function SpendingLineChart(): JSX.Element {
-  const fakeData = generateSpendingTimeSeries(30); // Last 30 days of fake data
+  const { token } = useAuth();
+  const [data, setData] = useState<SpendingTimeSeriesEntry[]>([]);
+
+  useEffect(() => {
+    if (!token) {
+      console.error("No token, can't fetch spending time series.");
+      return;
+    }
+    fetchSpendingTimeSeries(token)
+      .then((fetchedData) => setData(fetchedData))
+      .catch((err) =>
+        console.error("Error fetching spending time series:", err),
+      );
+  }, [token]);
 
   return (
     <Box sx={{ width: "100%", height: 400 }}>
       <ResponsiveContainer width="100%" height="90%">
-        <LineChart data={fakeData}>
+        <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="date" />
           <YAxis />
           <Tooltip />
           <Line
             type="monotone"
-            dataKey="totalSpending"
+            dataKey="total_spending"
             stroke="#8884d8"
             strokeWidth={2}
           />

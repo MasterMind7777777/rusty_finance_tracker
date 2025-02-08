@@ -7,11 +7,14 @@ import { fetchProducts } from "../services/ProductService";
 import { ProductPriceList } from "../components/ProductPrices/ProductPriceList";
 import { ProductPriceForm } from "../components/ProductPrices/ProductPriceForm";
 import type { Product } from "../types/product";
-import type { ProductPrice } from "../types/price";
+import type {
+  ProductPriceDto,
+  CreateProductPriceResponse,
+} from "../types/price";
 
 export default function ProductPricesPage() {
   const { token } = useAuth();
-  const [prices, setPrices] = useState<ProductPrice[]>([]);
+  const [prices, setPrices] = useState<ProductPriceDto[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
@@ -44,6 +47,19 @@ export default function ProductPricesPage() {
     }
   }
 
+  // Use the response returned by createProductPrice to update state.
+  function handlePriceCreated(response: CreateProductPriceResponse) {
+    // Append the new product price.
+    setPrices((prev) => [...prev, response.product_price]);
+    // If the new product (from the response) isn’t already in our list, add it.
+    setProducts((prev) => {
+      if (!prev.some((p) => p.id === response.product.id)) {
+        return [...prev, response.product];
+      }
+      return prev;
+    });
+  }
+
   return (
     <Box sx={{ p: 2 }}>
       <Stack
@@ -57,11 +73,11 @@ export default function ProductPricesPage() {
           Refresh Prices
         </Button>
       </Stack>
-      <ProductPriceList prices={prices} />
+      <ProductPriceList prices={prices} products={products} />
       <ProductPriceForm
         token={token || ""}
         products={products}
-        onPriceCreated={handleRefreshPrices}
+        onPriceCreated={handlePriceCreated}
       />
     </Box>
   );

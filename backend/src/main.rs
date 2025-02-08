@@ -4,6 +4,7 @@ mod db;
 mod schema;
 
 mod domain {
+    pub mod analytics;
     pub mod categories;
     pub mod product_prices;
     pub mod products;
@@ -13,6 +14,7 @@ mod domain {
 }
 
 mod routes {
+    pub mod analytics_routes;
     pub mod category_routes;
     pub mod product_price_routes;
     pub mod product_routes;
@@ -36,8 +38,9 @@ use crate::config::AppConfig;
 use crate::db::{init_pool, PgPool};
 
 use crate::routes::{
-    category_routes::category_routes, product_routes::product_routes, tag_routes::tag_routes,
-    transaction_routes::transaction_routes, user_routes::user_routes,
+    analytics_routes::analytics_routes, category_routes::category_routes,
+    product_routes::product_routes, tag_routes::tag_routes, transaction_routes::transaction_routes,
+    user_routes::user_routes,
 };
 
 #[cfg(test)]
@@ -62,6 +65,7 @@ pub fn main_router(shared_state: Arc<AppState>) -> Router {
         .merge(product_price_routes())
         .merge(transaction_routes())
         .merge(tag_routes())
+        .merge(analytics_routes())
         .layer(axum::middleware::from_fn(require_auth));
 
     let cors = CorsLayer::new()

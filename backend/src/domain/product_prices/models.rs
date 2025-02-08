@@ -1,4 +1,4 @@
-use crate::schema::product_prices;
+use crate::{domain::products::models::Product, schema::product_prices};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -30,4 +30,18 @@ pub struct NewProductPrice {
     pub product_id: i32,
     pub price: i32, // In cents.
     pub created_at: NaiveDateTime,
+}
+
+#[derive(Deserialize)]
+pub struct ProductPricePayload {
+    pub product_id: Option<i32>,
+    pub product_name: Option<String>,
+    pub price: f64, // in dollars
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Serialize)]
+pub struct CreateProductPriceResponse {
+    pub product_price: ProductPriceDto,
+    pub product: Product,
 }

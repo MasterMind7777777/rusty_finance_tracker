@@ -1,5 +1,9 @@
 import { buildUrl, getAuthHeaders } from "./api";
-import type { Category, CategoryPayload } from "../types/category";
+import type {
+  CreateCategoryResponse,
+  Category,
+  CategoryPayload,
+} from "../types/category";
 
 export async function fetchCategories(token: string): Promise<Category[]> {
   const res = await fetch(buildUrl("/categories"), {
@@ -16,7 +20,7 @@ export async function fetchCategories(token: string): Promise<Category[]> {
 export async function createCategory(
   token: string,
   payload: CategoryPayload,
-): Promise<Category | null> {
+): Promise<CreateCategoryResponse | null> {
   const res = await fetch(buildUrl("/categories"), {
     method: "POST",
     headers: getAuthHeaders(token),
@@ -28,7 +32,7 @@ export async function createCategory(
     return null;
   }
 
-  // Parse the newly created category from the response
-  const newCat: Category = await res.json();
+  // Parse the newly created category response from the backend.
+  const newCat: CreateCategoryResponse = await res.json();
   return newCat;
 }

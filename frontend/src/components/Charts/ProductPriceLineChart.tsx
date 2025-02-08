@@ -8,15 +8,35 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { generateProductPriceData } from "../../data/fakeData";
+import { useState, useEffect } from "react";
+import { fetchProductPriceData } from "../../services/AnaliticsService";
+import { ProductPriceData } from "../../types/analytics";
+import { useAuth } from "../../contexts/AuthContext";
 
-export function ProductPriceLineChart(): JSX.Element {
-  const fakePriceData = generateProductPriceData(12); // 12 months
+interface ProductPriceLineChartProps {
+  productId: number;
+}
+
+export function ProductPriceLineChart({
+  productId,
+}: ProductPriceLineChartProps): JSX.Element {
+  const { token } = useAuth();
+  const [data, setData] = useState<ProductPriceData[]>([]);
+
+  useEffect(() => {
+    if (!token) {
+      console.error("No token, can't fetch product price data.");
+      return;
+    }
+    fetchProductPriceData(token, productId)
+      .then((fetchedData) => setData(fetchedData))
+      .catch((err) => console.error("Error fetching product price data:", err));
+  }, [token, productId]);
 
   return (
     <Box sx={{ width: "100%", height: 400 }}>
       <ResponsiveContainer width="100%" height="90%">
-        <LineChart data={fakePriceData}>
+        <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="date" />
           <YAxis />

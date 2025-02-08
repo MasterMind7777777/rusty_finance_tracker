@@ -3,7 +3,7 @@ import { Box, Typography, Button, Stack } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { fetchCategories } from "../services/CategoryService";
 import { useAuth } from "../contexts/AuthContext";
-import type { Category } from "../types/category";
+import type { Category, CreateCategoryResponse } from "../types/category";
 import { CategoryList } from "../components/Categories/CategoryList";
 import { CategoryForm } from "../components/Categories/CategoryForm";
 
@@ -30,8 +30,21 @@ export default function CategoriesPage() {
     }
   }
 
-  function handleCategoryCreated(newCategory: Category) {
-    setCategories((prev) => [...prev, newCategory]);
+  // Updated to accept a CreateCategoryResponse
+  function handleCategoryCreated(response: CreateCategoryResponse) {
+    setCategories((prev) => {
+      const newCategories = [...prev];
+      const parent = response.parent; // Narrow the value
+      if (parent && !newCategories.some((cat) => cat.id === parent.id)) {
+        newCategories.push({
+          id: parent.id,
+          name: parent.name,
+          parent_category_id: null,
+        });
+      }
+      newCategories.push(response.category);
+      return newCategories;
+    });
   }
 
   return (

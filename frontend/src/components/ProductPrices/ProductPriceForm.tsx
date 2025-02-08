@@ -1,5 +1,5 @@
 // src/components/ProductPrices/ProductPriceForm.tsx
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import {
   Box,
   Typography,
@@ -16,13 +16,13 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs, { Dayjs } from "dayjs";
 import { AutocompleteMui } from "../Autocomplete/Autocomplete";
 import { createProductPrice } from "../../services/PriceService";
-import { createProduct } from "../../services/ProductService";
 import type { Product } from "../../types/product";
+import type { CreateProductPriceResponse } from "../../types/price";
 
 interface ProductPriceFormProps {
   token: string;
   products: Product[];
-  onPriceCreated?: () => void;
+  onPriceCreated?: (response: CreateProductPriceResponse) => void;
 }
 
 export function ProductPriceForm({
@@ -41,70 +41,44 @@ export function ProductPriceForm({
     "success",
   );
 
-  // Prevent duplicate product creation calls
-  const creatingRef = useRef(false);
-
-  async function ensureProduct(): Promise<Product | null> {
-    if (!token) return null;
-    if (selectedProduct) return selectedProduct;
-    if (productInput.trim()) {
-      if (creatingRef.current) {
-        console.log("Skipping duplicate product creation call...");
-        return null;
-      }
-      creatingRef.current = true;
-      try {
-        const newProd = await createProduct(token, {
-          name: productInput.trim(),
-        });
-        if (!newProd) {
-          setSnackbarMessage("Failed to create product.");
-          setSnackbarSeverity("error");
-          setSnackbarOpen(true);
-          return null;
-        }
-        setSelectedProduct(newProd);
-        return newProd;
-      } catch (error) {
-        console.error("Error creating product:", error);
-        setSnackbarMessage("Error creating product.");
-        setSnackbarSeverity("error");
-        setSnackbarOpen(true);
-        return null;
-      } finally {
-        creatingRef.current = false;
-      }
-    }
-    return null;
-  }
-
   async function handleCreatePrice(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
 
-    try {
-      const prod = await ensureProduct();
-      if (!prod?.id) {
-        setSnackbarMessage("No product selected or created.");
-        setSnackbarSeverity("error");
-        setSnackbarOpen(true);
-        return;
-      }
-      const createdAtStr = createdAt
-        ? createdAt.format("YYYY-MM-DDTHH:mm:ss")
-        : "";
-      const success = await createProductPrice(token, {
-        product_id: prod.id,
-        price: Number(priceVal),
-        created_at: createdAtStr,
-      });
+    // Require that either a product is selected or a product name is typed.
+    if (!selectedProduct && !productInput.trim()) {
+      setSnackbarMessage("Please select or type a product.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+      return;
+    }
 
-      if (success) {
+    const createdAtStr = createdAt
+      ? createdAt.format("YYYY-MM-DDTHH:mm:ss")
+      : "";
+    // Build the payload: if a product was selected, send its ID;
+    // otherwise, send the product name so that the backend can create it.
+    const payload: any = {
+      price: Number(priceVal),
+      created_at: createdAtStr,
+    };
+    if (selectedProduct) {
+      payload.product_id = selectedProduct.id;
+    } else {
+      payload.product_name = productInput.trim();
+    }
+
+    try {
+      // createProductPrice now returns a CreateProductPriceResponse.
+      const response = await createProductPrice(token, payload);
+      if (response) {
         setSnackbarMessage("Product price created successfully.");
         setSnackbarSeverity("success");
         setSnackbarOpen(true);
-        if (onPriceCreated) onPriceCreated();
-        // Reset fields
+        if (onPriceCreated) {
+          onPriceCreated(response);
+        }
+        // Reset fields.
         setSelectedProduct(null);
         setProductInput("");
         setPriceVal("");

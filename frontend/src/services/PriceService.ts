@@ -1,9 +1,13 @@
 import { buildUrl, getAuthHeaders } from "./api";
-import type { NewProductPrice, ProductPrice } from "../types/price";
+import type {
+  NewProductPrice,
+  ProductPriceDto,
+  CreateProductPriceResponse,
+} from "../types/price";
 
 export async function fetchProductPrices(
   token: string,
-): Promise<ProductPrice[]> {
+): Promise<ProductPriceDto[]> {
   const res = await fetch(buildUrl("/product_prices"), {
     method: "GET",
     headers: getAuthHeaders(token),
@@ -20,7 +24,7 @@ export async function fetchProductPrices(
 export async function createProductPrice(
   token: string,
   payload: NewProductPrice,
-): Promise<ProductPrice | null> {
+): Promise<CreateProductPriceResponse | null> {
   const res = await fetch(buildUrl("/product_prices"), {
     method: "POST",
     headers: getAuthHeaders(token),
