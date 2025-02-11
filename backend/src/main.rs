@@ -73,11 +73,10 @@ pub fn main_router(shared_state: Arc<AppState>) -> Router {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    let api_routes = Router::new().merge(user_routes()).merge(protected_routes);
+
     Router::new()
-        // Instead of .route("/users", post(sign_up)) here,
-        // we MERGE the user_routes from routes::user_routes
-        .merge(user_routes())
-        .merge(protected_routes)
+        .nest("/api", api_routes)
         .with_state(shared_state)
         .layer(cors)
         .layer(TraceLayer::new_for_http())

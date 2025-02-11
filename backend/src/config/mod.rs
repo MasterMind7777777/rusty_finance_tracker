@@ -19,7 +19,7 @@ impl AppConfig {
 
         // Optionally allow an address override
         // or default to "127.0.0.1:3000"
-        let address = env::var("SERVER_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
+        let address = env::var("SERVER_ADDRESS").unwrap_or_else(|_| "127.0.0.1:8000".to_string());
 
         Ok(Self {
             database_url,
