@@ -76,7 +76,7 @@ pub fn main_router(shared_state: Arc<AppState>) -> Router {
     let api_routes = Router::new().merge(user_routes()).merge(protected_routes);
 
     Router::new()
-        .nest("/api", api_routes)
+        .nest("/rusty-fin/api", api_routes)
         .with_state(shared_state)
         .layer(cors)
         .layer(TraceLayer::new_for_http())
